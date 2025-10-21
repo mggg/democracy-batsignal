@@ -1,10 +1,3 @@
-<#  setup.ps1
-    Windows/PowerShell port of your Bash bootstrapper.
-    - Installs/ensures: uv, Rust/Cargo (optional)
-    - Creates a project skeleton, sets Python via uv, adds deps
-    - Writes helper scripts (same content as your originals)
-#>
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -19,9 +12,8 @@ function Test-Command {
 }
 
 function Ensure-Realpath {
-    # In PowerShell, Resolve-Path is the 'realpath' equivalent
     if (-not (Test-Command -Name 'Resolve-Path')) {
-        Write-Err "Resolve-Path not available (unexpected). Please update PowerShell."
+        Write-Err "Resolve-Path not available. Please update PowerShell."
         throw "Resolve-Path missing"
     }
 }
@@ -29,19 +21,17 @@ function Ensure-Realpath {
 function Ensure-Uv {
     if (Test-Command -Name 'uv') { return }
     $choice = Read-Host "uv not found. Install it now? (y/[n])"
-    if ($choice -ne 'y' -and $choice -ne 'Y') {
+    if ($choice -notin @('y','Y')) {
         Write-Err "uv is required to run this script. Exiting."
         exit 1
     }
     Write-Info "Installing uv…"
     try {
-        # Official Windows installer (PowerShell)
-        iwr -UseBasicParsing https://astral.sh/uv/install.ps1 | iex
-        # Common install path is $HOME\.local\bin (on Windows too)
+        # Recommended installer
+        Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+        # Common install path
         $uvBin = Join-Path $HOME ".local\bin"
-        if (Test-Path $uvBin) {
-            $env:Path = "$uvBin;$env:Path"
-        }
+        if (Test-Path $uvBin) { $env:Path = "$uvBin;$env:Path" }
     } catch {
         Write-Err "uv installation failed. See https://docs.astral.sh/uv/getting-started/installation/"
         throw
@@ -53,29 +43,22 @@ function Ensure-Uv {
     Write-OK "uv installed."
 }
 
-function Write-Info($msg){ Write-Host "[*] $msg" -ForegroundColor Cyan }
-function Write-OK($msg){ Write-Host "[OK] $msg" -ForegroundColor Green }
-function Write-Warn($msg){ Write-Host "[!] $msg" -ForegroundColor Yellow }
-function Write-Err($msg){ Write-Host "[X] $msg" -ForegroundColor Red }
-
 function Ensure-BuildTools {
     param(
         [switch]$InstallIfMissing = $true,
         [switch]$RequireWinSDK    = $true
     )
-    $ErrorActionPreference = 'Stop'
 
     function Test-CppToolchain {
         $hasLink = [bool](Get-Command link.exe -ErrorAction SilentlyContinue)
         $hasCl   = [bool](Get-Command cl.exe   -ErrorAction SilentlyContinue)
 
-        $sdkOk = $true
-        if ($RequireWinSDK) {
-            $sdkOk = $false
+        $sdkOk = -not $RequireWinSDK ? $true : $false
 
+        if ($RequireWinSDK) {
             $candidates = @()
 
-            # 1) Registry (may not exist on a fresh box)
+            # 1) Registry
             try {
                 $roots = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots' -ErrorAction Stop
                 if ($roots -and $roots.PSObject.Properties.Name -contains 'KitsRoot10') {
@@ -83,10 +66,10 @@ function Ensure-BuildTools {
                 }
             } catch { }
 
-            # 2) Environment variable (set by SDK installers)
+            # 2) Env var
             if ($env:WindowsSdkDir) { $candidates += $env:WindowsSdkDir }
 
-            # 3) Common install locations
+            # 3) Common locations
             $candidates += @(
                 'C:\Program Files (x86)\Windows Kits\10\',
                 'C:\Program Files\Windows Kits\10\'
@@ -105,19 +88,33 @@ function Ensure-BuildTools {
     }
 
     function Refresh-MsvcPath {
-        $vswhere = Join-Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer" 'vswhere.exe'
+        $pf86 = ${env:ProgramFiles(x86)}
+        if (-not $pf86) { return }
+        $vswhere = Join-Path $pf86 'Microsoft Visual Studio\Installer\vswhere.exe'
         if (-not (Test-Path $vswhere)) { return }
+
         $vsPath = & $vswhere -latest -products * `
             -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
             -property installationPath 2>$null
         if (-not $vsPath) { return }
+
         $toolRoot = Join-Path $vsPath 'VC\Tools\MSVC'
         if (-not (Test-Path $toolRoot)) { return }
+
         $latest = Get-ChildItem $toolRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
-        if ($latest) {
-            $binx64 = Join-Path $latest.FullName 'bin\Hostx64\x64'
-            if (Test-Path $binx64 -and ($env:Path -notlike "*$binx64*")) {
-                $env:Path = "$binx64;$env:Path"
+        if (-not $latest) { return }
+
+        $binCandidates = @(
+            Join-Path $latest.FullName 'bin\Hostx64\x64'
+            Join-Path $latest.FullName 'bin\Hostx86\x64'
+            Join-Path $latest.FullName 'bin\Hostx64\x86'
+            Join-Path $latest.FullName 'bin\Hostx86\x86'
+        ) | Where-Object { Test-Path $_ }
+
+        foreach ($bin in $binCandidates) {
+            $escaped = [regex]::Escape($bin)
+            if ($env:Path -notmatch "(^|;)$escaped(;|$)") {
+                $env:Path = "$bin;$env:Path"
             }
         }
     }
@@ -138,7 +135,7 @@ function Ensure-BuildTools {
         throw "Build tools not present."
     }
 
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    if (-not (Test-Command -Name 'winget')) {
         Write-Err "winget not found. Install Build Tools manually via Visual Studio Installer."
         throw "winget missing"
     }
@@ -152,7 +149,6 @@ function Ensure-BuildTools {
 
     winget install --id Microsoft.VisualStudio.2022.BuildTools -e --source winget --override "$override"
 
-    # Refresh PATH and re-check
     Refresh-MsvcPath
     $state = Test-CppToolchain
     if (-not ($state.Link -and $state.Cl -and $state.Sdk)) {
@@ -162,7 +158,7 @@ function Ensure-BuildTools {
     }
 
     Write-OK "MSVC build tools ready."
-    if (Get-Command rustup -ErrorAction SilentlyContinue) {
+    if (Test-Command -Name 'rustup') {
         try {
             & rustup default stable-x86_64-pc-windows-msvc | Out-Null
             & rustup component add rustfmt clippy | Out-Null
@@ -171,17 +167,14 @@ function Ensure-BuildTools {
     return $true
 }
 
-
-
 function Ensure-Cargo {
     if (Test-Command -Name 'cargo') {
-        # Make sure current session picks up ~/.cargo/bin
         $cargoBin = Join-Path $HOME ".cargo\bin"
         if (Test-Path $cargoBin) { $env:Path = "$cargoBin;$env:Path" }
         return
     }
     $choice = Read-Host "Cargo not found. Install Rust/Cargo via rustup now? (y/[n])"
-    if ($choice -ne 'y' -and $choice -ne 'Y') {
+    if ($choice -notin @('y','Y')) {
         Write-Err "Cargo is required for FRCW/BEN path. Exiting."
         exit 1
     }
@@ -208,16 +201,22 @@ function Ensure-Cargo {
 }
 
 function New-FileUtf8 {
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Content
     )
-    New-Item -ItemType Directory -Force -Path (Split-Path $Path) | Out-Null
+
+    $dir = Split-Path -Path $Path -Parent
+    if ([string]::IsNullOrWhiteSpace($dir)) { $dir = '.' }
+
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $Content | Out-File -FilePath $Path -Encoding UTF8 -Force
 }
 
+
 function Write-BasicCliGerrychain {
-@"
+@'
 from gerrychain import Graph, Partition, MarkovChain
 from gerrychain.updaters import Tally
 from gerrychain.accept import always_accept
@@ -273,7 +272,6 @@ def main(
         accept=always_accept,
     )
 
-    # NOTE: Can just print and pipe to binary-ensemble
     with jl.open(output_path, "w") as f:
         for i, part in enumerate(chain):
             f.write(
@@ -288,11 +286,11 @@ def main(
 
 if __name__ == "__main__":
     main()
-"@
+'@
 }
 
 function Write-BatchExampleSimple {
-@"
+@'
 param(
   [int[]]$RngSeeds = @(42,43,44),
   [int]$TotalSteps = 1000
@@ -318,11 +316,11 @@ foreach ($seed in $RngSeeds) {
     --population-tolerance 0.01 `
     --total-steps   $TotalSteps *> $logFile
 }
-"@
+'@
 }
 
 function Write-BatchExampleParallel {
-@"
+@'
 param(
   [int]$MaxJobs = [Environment]::ProcessorCount,
   [int[]]$RngSeeds = 1..50,
@@ -368,11 +366,11 @@ Write-Progress -Activity "Running jobs" -Status "Waiting for completion…"
 Wait-Job -Job $jobs
 Receive-Job -Job $jobs -Keep | Out-Null
 Write-Progress -Activity "Running jobs" -Completed
-"@
+'@
 }
 
 function Write-RustShExample {
-@"
+@'
 param(
   [string]$PlanName = 'district',
   [int]$n_steps = 1000,
@@ -381,12 +379,24 @@ param(
   [string]$pop_col = 'TOTPOP'
 )
 
-$TOPDIR = (Resolve-Path $PSScriptRoot).Path
-$json_dir   = Join-Path $TOPDIR 'JSON_dualgraphs'
-$output_dir = Join-Path $TOPDIR 'chain_outputs'
+# Project root is the parent of this script's folder
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
-$json_file = (Resolve-Path (Join-Path $json_dir 'gerrymandria.json')).Path
-$final_output_file = Join-Path $output_dir "gerrymandria_chain_${n_steps}_steps.jsonl.ben"
+$json_dir   = Join-Path $ProjectRoot 'JSON_dualgraphs'
+$output_dir = Join-Path $ProjectRoot 'chain_outputs'
+
+# Ensure output dir exists
+New-Item -ItemType Directory -Force -Path $output_dir | Out-Null
+
+# Build JSON path (don't Resolve-Path until we know it exists)
+$json_file = Join-Path $json_dir 'gerrymandria.json'
+
+if (-not (Test-Path $json_file)) {
+  Write-Error "Could not find graph JSON at: $json_file`nDid the bootstrap step download it?"
+  exit 1
+}
+
+$final_output_file = Join-Path $output_dir ("gerrymandria_chain_{0}_steps.jsonl.ben" -f $n_steps)
 
 & frcw `
   --assignment-col $PlanName `
@@ -400,11 +410,11 @@ $final_output_file = Join-Path $output_dir "gerrymandria_chain_${n_steps}_steps.
   --batch-size 1 `
   --n-threads 1 `
   --output-file $final_output_file
-"@
+'@
 }
 
 function Write-JsonlToBen {
-@"
+@'
 param([switch]$Recurse = $true)
 
 $files = Get-ChildItem -File -Filter *.jsonl -Recurse:$Recurse
@@ -412,11 +422,11 @@ foreach ($f in $files) {
   Write-Host "Processing $($f.FullName)"
   & ben -m encode $f.FullName -v -w
 }
-"@
+'@
 }
 
 function Write-BenToXben {
-@"
+@'
 param([switch]$Recurse = $true)
 
 $files = Get-ChildItem -File -Filter *.ben -Recurse:$Recurse
@@ -424,7 +434,7 @@ foreach ($f in $files) {
   Write-Host "Processing $($f.FullName)"
   & ben -m x-encode $f.FullName -v -w
 }
-"@
+'@
 }
 
 # ============================
@@ -471,9 +481,8 @@ Write-Info "Creating project: $projectName"
 New-Item -ItemType Directory -Force -Path $projectName | Out-Null
 Push-Location $projectName
 
-# Ensure uv Python
+# Ensure uv Python and init
 & uv python install $pythonVersion
-# Initialize project
 & uv init --python $pythonVersion
 
 Write-OK "Project $projectName initialized with uv ($pythonVersion)."
@@ -482,8 +491,8 @@ Write-Info "Adding standard packages to pyproject.toml…"
 # Remove default files uv created (if present)
 Remove-Item -Force -ErrorAction SilentlyContinue "README.md","main.py"
 
-# Add deps
-& uv add numpy pandas matplotlib seaborn "gerrychain[geo]" maup ipykernel ipywidgets click gerrytools
+# Add deps (include jsonlines used by example script)
+& uv add numpy pandas matplotlib seaborn "gerrychain[geo]" maup ipykernel ipywidgets click gerrytools jsonlines
 & uv add tool black
 
 # Create directories
@@ -496,24 +505,23 @@ $dirs | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null
 # .gitignore
 Add-Content -Path ".gitignore" -Value "dev_files"
 
-# .env
-Add-Content -Path ".env" -Value "export PYTHONHASHSEED=0"
+# .env (uv --env-file expects KEY=VALUE lines; no 'export')
+Add-Content -Path ".env" -Value "PYTHONHASHSEED=0"
 
 # Download JSON file
 Write-Info "Downloading gerrymandria.json…"
 Invoke-WebRequest "https://raw.githubusercontent.com/mggg/GerryChain/refs/heads/main/docs/_static/gerrymandria.json" -OutFile "JSON_dualgraphs\gerrymandria.json"
 
-# Write helper files
-Write-BasicCliGerrychain    | New-FileUtf8 -Path "pipeline_scripts\example_cli.py"          -Content (Write-BasicCliGerrychain)
-Write-RustShExample         | New-FileUtf8 -Path "pipeline_scripts\rust_example_script.sh"  -Content (Write-RustShExample)
-Write-BatchExampleSimple    | New-FileUtf8 -Path "batch_example_python_cli_simple.sh"       -Content (Write-BatchExampleSimple)
-Write-BatchExampleParallel  | New-FileUtf8 -Path "batch_example_python_cli_parallel.sh"     -Content (Write-BatchExampleParallel)
-Write-JsonlToBen            | New-FileUtf8 -Path "chain_outputs\jsonl_to_ben.sh"            -Content (Write-JsonlToBen)
-Write-BenToXben             | New-FileUtf8 -Path "chain_outputs\ben_to_xben.sh"             -Content (Write-BenToXben)
+# Write helper files (.ps1 since we're on Windows)
+New-FileUtf8 -Path "pipeline_scripts\example_cli.py"          -Content (Write-BasicCliGerrychain)
+New-FileUtf8 -Path "pipeline_scripts\rust_example_script.ps1"  -Content (Write-RustShExample)
+New-FileUtf8 -Path "batch_example_python_cli_simple.ps1"       -Content (Write-BatchExampleSimple)
+New-FileUtf8 -Path "batch_example_python_cli_parallel.ps1"     -Content (Write-BatchExampleParallel)
+New-FileUtf8 -Path "chain_outputs\jsonl_to_ben.ps1"            -Content (Write-JsonlToBen)
+New-FileUtf8 -Path "chain_outputs\ben_to_xben.ps1"             -Content (Write-BenToXben)
 
 Write-OK "Your project is ready!"
 Write-Warn "If 'uv' or 'cargo' commands are not recognized in *new* shells, log out/in or ensure these are on PATH:"
 Write-Host "  $HOME\.local\bin"
 Write-Host "  $HOME\.cargo\bin"
 Pop-Location
-

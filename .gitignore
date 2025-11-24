@@ -1,0 +1,10 @@
+*
+
+.venv
+dev_files
+
+!.gitignore
+!template_maker.ps1
+!template_maker.sh
+!README.md
+

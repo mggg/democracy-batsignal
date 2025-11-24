@@ -1182,11 +1182,12 @@ function Main
     Write-Info "Downloading gerrymandria.json..."
     # Make sure destination exists
     $uri = "https://raw.githubusercontent.com/mggg/GerryChain/refs/heads/main/docs/_static/gerrymandria.json"
-    $dest = "JSON_dualgraphs"
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
+    $destDir = "JSON_dualgraphs"
+    $destFile = Join-Path $destDir "gerrymandria.json"
+    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
 
     Invoke-WithRetry -MaxAttempts 5 -Action {
-        Invoke-WebRequest -Uri $uri -OutFile $dest
+        Invoke-WebRequest -Uri $uri -OutFile $destFile -UseBasicParsing
     }
 
     Write-Info "Downloading MN_precincts.geojson..."
@@ -1196,11 +1197,11 @@ function Main
         $tmp = New-TemporaryFile
         try
         {
-            Invoke-WebRequest -Uri $uri -OutFile $tmp
-            Expand-Archive -LiteralPath $tmp -DestinationPath $dest -Force
+            Invoke-WebRequest -Uri $uri -OutFile $tmp.FullName -UseBasicParsing
+            Expand-Archive -LiteralPath $tmp.FullName -DestinationPath $destDir -Force
         } finally
         {
-            Remove-Item $tmp -ErrorAction SilentlyContinue
+            Remove-Item $tmp.FullName -ErrorAction SilentlyContinue
         }
     }
 

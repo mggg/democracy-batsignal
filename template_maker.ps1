@@ -373,7 +373,7 @@ foreach ($seed in $RngSeeds) {
 }
 
 foreach ($seed in $RngSeeds2) {
-  $outFile = Join-Path (Join-Path $TOPDIR "chain_outputs") ("MN_chain_{0}_steps_seed{1}.jsonl.ben" -f $NSteps2, $seed)
+  $outFile = Join-Path (Join-Path $TOPDIR "chain_outputs") ("MN_chain_{0}_steps_seed{1}.jsonl.ben" -f $TotalSteps2, $seed)
 
   & uv run (Join-Path $TOPDIR (Join-Path "pipeline_scripts" "example_cli.py")) `
     --graph-path   (Join-Path $TOPDIR (Join-Path "JSON_dualgraphs" "MN_precincts.geojson")) `

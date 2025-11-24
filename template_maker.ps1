@@ -1191,17 +1191,20 @@ function Main
     }
 
     Write-Info "Downloading MN_precincts.geojson..."
-    $uri  = "https://github.com/mggg/GerryChain/raw/main/docs/_static/MN.zip"
+    $uri = "https://github.com/mggg/GerryChain/raw/main/docs/_static/MN.zip"
 
     Invoke-WithRetry -MaxAttempts 5 -Action {
-        $tmp = New-TemporaryFile
+
+        # create a temp *zip* path (PS5 Expand-Archive checks extension)
+        $tmpZip = Join-Path $env:TEMP ("MN_" + [guid]::NewGuid().ToString() + ".zip")
+
         try
         {
-            Invoke-WebRequest -Uri $uri -OutFile $tmp.FullName -UseBasicParsing
-            Expand-Archive -LiteralPath $tmp.FullName -DestinationPath $destDir -Force
+            Invoke-WebRequest -Uri $uri -OutFile $tmpZip -UseBasicParsing
+            Expand-Archive -LiteralPath $tmpZip -DestinationPath $destDir -Force
         } finally
         {
-            Remove-Item $tmp.FullName -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $tmpZip -ErrorAction SilentlyContinue
         }
     }
 

@@ -894,18 +894,18 @@ function main() {
     if [[ "$use_frcw" == "y" || "$use_frcw" == "Y" ]]; then
         check_cargo_installed
         echo "Installing FRCW from lattest git commit..."
-        cargo install --git "https://github.com/mggg/frcw.rs" --branch "main"
+        cargo install --git "https://github.com/mggg/frcw.rs" --branch "main" --force
         echo "FRCW has been installed."
 
         echo "Installing binary-ensemble"
-        cargo install binary-ensemble
+        cargo install binary-ensemble --force
         echo "binary-ensemble has been installed."
     else
         read -p "Would you like to use BEN in this project? (y/[n]): " use_ben
         if [[ "$use_ben" == "y" || "$use_ben" == "Y" ]]; then
             check_cargo_installed
             echo "Installing binary-ensemble"
-            cargo install binary-ensemble
+            cargo install binary-ensemble --force
             echo "binary-ensemble has been installed."
         fi
     fi

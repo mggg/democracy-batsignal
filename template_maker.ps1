@@ -1120,10 +1120,10 @@ function Main
         Confirm-BuildTools
         Confirm-Cargo
         Write-Info "Installing FRCW from latest git commit..."
-        & cargo install --git "https://github.com/mggg/frcw.rs" --branch "main"
+        & cargo install --git "https://github.com/mggg/frcw.rs" --branch "main" --force
         Write-OK "FRCW installed."
         Write-Info "Installing binary-ensemble..."
-        & cargo install binary-ensemble
+        & cargo install binary-ensemble --force
         Write-OK "binary-ensemble installed."
     } else
     {
@@ -1132,7 +1132,7 @@ function Main
         {
             Confirm-Cargo
             Write-Info "Installing binary-ensemble..."
-            & cargo install binary-ensemble
+            & cargo install binary-ensemble --force
             Write-OK "binary-ensemble installed."
         }
     }

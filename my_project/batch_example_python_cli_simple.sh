@@ -18,5 +18,22 @@ for seed in "${rng_seeds[@]}"; do
         --pop-col "TOTPOP" \
         --rng-seed $seed \
         --population-tolerance 0.01 \
-        --total-steps $n_steps > "./chain_logs/log_simple_rng_seed_$seed.log" 2>&1
+        --total-steps $n_steps \
+        --writeas "jsonl" > "./chain_logs/log_simple_rng_seed_$seed.log" 2>&1
+done
+
+
+rng_seeds=(42)
+n_steps=100000
+
+for seed in "${rng_seeds[@]}"; do
+    uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
+        --graph-path "${TOPDIR}/JSON_dualgraphs/MN_precincts.geojson" \
+        --output-path "${TOPDIR}/chain_outputs/MN_chain_${n_steps}_steps_seed${seed}.jsonl.ben" \
+        --starting-plan "CONGDIST" \
+        --pop-col "TOTPOP" \
+        --rng-seed $seed \
+        --population-tolerance 0.05 \
+        --total-steps $n_steps \
+        --writeas "ben"
 done

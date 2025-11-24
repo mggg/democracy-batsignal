@@ -7,6 +7,9 @@ import random
 import jsonlines as jl
 import click
 import numpy as np
+from pathlib import Path
+from pyben import PyBenEncoder
+import sys
 
 
 @click.command()
@@ -17,6 +20,7 @@ import numpy as np
 @click.option("--rng-seed", type=int)
 @click.option("--population-tolerance", type=float, default=0.01)
 @click.option("--total-steps", type=int, default=10_000)
+@click.option("--writeas", type=click.Choice(["jsonl", "ben"]), default="ben")
 def main(
     graph_path,
     output_path,
@@ -25,10 +29,18 @@ def main(
     rng_seed,
     population_tolerance,
     total_steps,
+    writeas,
 ):
     random.seed(rng_seed)
     np.random.seed(rng_seed)
-    graph = Graph.from_json(graph_path)
+
+    try:
+        if graph_path.endswith(".json"):
+            graph = Graph.from_json(graph_path)
+        else:
+            graph = Graph.from_file(graph_path)
+    except Exception as e:
+        raise ValueError(f"Failed to load graph from {graph_path}: {e}")
 
     initial_partition = Partition(
         graph,
@@ -54,18 +66,41 @@ def main(
         accept=always_accept,
     )
 
-    # NOTE: Can just print and pipe to binary-ensemble
-    with jl.open(output_path, "w") as f:
-        for i, part in enumerate(chain):
-            f.write(
-                {
-                    "assignment": part.assignment.to_series()
-                    .astype(int)
-                    .sort_index()
-                    .to_list(),
-                    "sample": i + 1,
-                }
-            )
+    graph_node_order = list(graph.nodes)
+
+    # This will print to the standard error stream so that logging does not interfere with the
+    # standard output.
+    print(
+        f"Writing output to '{Path(output_path).name}' in '{writeas.upper()}' format.",
+        file=sys.stderr,
+        flush=True,
+    )
+    match writeas:
+        case "jsonl":
+            with jl.open(output_path, "w") as writer:
+                for i, partition in enumerate(chain.with_progress_bar()):
+                    assignment_series = partition.assignment.to_series()
+                    ordered_assignment = (
+                        assignment_series.loc[graph_node_order].astype(int).to_list()
+                    )
+                    writer.write(
+                        {
+                            "assignment": ordered_assignment,
+                            "sample": i + 1,
+                        }
+                    )
+
+        case "ben":
+            with PyBenEncoder(output_path, overwrite=True) as encoder:
+                for partition in chain.with_progress_bar():
+                    assignment_series = partition.assignment.to_series()
+                    ordered_assignment = (
+                        assignment_series.loc[graph_node_order].astype(int).to_list()
+                    )
+                    encoder.write(ordered_assignment)
+
+        case _:
+            raise ValueError(f"Unsupported writeas format: {writeas}")
 
 
 if __name__ == "__main__":

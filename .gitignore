@@ -8,3 +8,7 @@ dev_files
 !template_maker.sh
 !README.md
 
+!my_project/
+!my_project/**
+
+

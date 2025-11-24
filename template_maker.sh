@@ -959,8 +959,20 @@ function main() {
     echo "export PYTHONHASHSEED=0" >> .env
 
     # grab the JSON file
-    curl -L -o "JSON_dualgraphs/gerrymandria.json" "https://raw.githubusercontent.com/mggg/GerryChain/refs/heads/main/docs/_static/gerrymandria.json"
-    curl -L https://github.com/mggg/GerryChain/raw/main/docs/_static/MN.zip | bsdtar -xvf - -C "JSON_dualgraphs"
+    curl -L \
+        --retry 5 \
+        --retry-delay 2 \
+        --retry-max-time 300 \
+        --retry-all-errors \
+        -o "JSON_dualgraphs/gerrymandria.json" \
+        "https://raw.githubusercontent.com/mggg/GerryChain/refs/heads/main/docs/_static/gerrymandria.json"
+    curl -L \
+        --retry 5 \
+        --retry-delay 2 \
+        --retry-max-time 300 \
+        --retry-all-errors \
+        "https://github.com/mggg/GerryChain/raw/main/docs/_static/MN.zip" \
+        | bsdtar -xvf - -C "JSON_dualgraphs"
 
     # make the script files and mark bash files as executable
     basic_cli_gerrychain > pipeline_scripts/example_cli.py

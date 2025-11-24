@@ -37,7 +37,7 @@ function check_uv_installed() {
             # On macOS/Linux/WSL/Git Bash this prevents the installer from writing ~/.config/fish/*
             (   
                 export XDG_CONFIG_HOME="$tmp_xdg"
-                # Don’t let a non-zero exit (e.g., shell integration step) kill our flow
+                # Don't let a non-zero exit (e.g., shell integration step) kill our flow
                 set +e
                 curl -LsSf https://astral.sh/uv/install.sh | sh
                 true
@@ -248,7 +248,7 @@ for seed in "${rng_seeds[@]}"; do
     # If we already have MAX_JOBS running, wait for one to finish
     while (($(running_count) >= MAX_JOBS)); do
         # show a spinner while we're blocked waiting
-        spinner_start "Waiting for a free slot: $(jobs -pr | wc -l)/$MAX_JOBS running…"
+        spinner_start "Waiting for a free slot: $(jobs -pr | wc -l)/$MAX_JOBS running..."
         if wait -n 2> /dev/null; then
             :
         else
@@ -267,7 +267,7 @@ for seed in "${rng_seeds[@]}"; do
 done
 
 if (($(running_count) > 0)); then
-    spinner_start "Finishing remaining jobs…"
+    spinner_start "Finishing remaining jobs..."
     wait "${pids[@]}" 2> /dev/null || true
     spinner_stop
 fi
@@ -914,7 +914,7 @@ function main() {
     python_version="${python_version:-3.11}"  # if empty/unset, use 3.11
     case "$python_version" in
         3.11 | 3.12 | 3.13) ;;               # match = valid -> do nothing, then end this block
-        *)                                     # anything else → default
+        *)                                     # anything else -> default
             echo "Invalid python version. Using default 3.11."
             python_version="3.11"
             ;;

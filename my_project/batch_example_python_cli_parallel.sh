@@ -96,7 +96,7 @@ for seed in "${rng_seeds[@]}"; do
     # If we already have MAX_JOBS running, wait for one to finish
     while (($(running_count) >= MAX_JOBS)); do
         # show a spinner while we're blocked waiting
-        spinner_start "Waiting for a free slot: $(jobs -pr | wc -l)/$MAX_JOBS running…"
+        spinner_start "Waiting for a free slot: $(jobs -pr | wc -l)/$MAX_JOBS running..."
         if wait -n 2> /dev/null; then
             :
         else
@@ -115,7 +115,7 @@ for seed in "${rng_seeds[@]}"; do
 done
 
 if (($(running_count) > 0)); then
-    spinner_start "Finishing remaining jobs…"
+    spinner_start "Finishing remaining jobs..."
     wait "${pids[@]}" 2> /dev/null || true
     spinner_stop
 fi

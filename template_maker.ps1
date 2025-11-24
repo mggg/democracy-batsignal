@@ -100,7 +100,7 @@ function Confirm-Uv
         Write-Err "uv is required to run this script. Exiting."
         exit 1
     }
-    Write-Info "Installing uv…"
+    Write-Info "Installing uv..."
     try
     {
         # Recommended installer
@@ -231,7 +231,7 @@ function Confirm-BuildTools
         }
     }
 
-    Write-Info "Checking MSVC toolchain (cl/link) and Windows SDK…"
+    Write-Info "Checking MSVC toolchain (cl/link) and Windows SDK..."
     Update-MsvcPath
     $state = Test-CppToolchain
     if ($state.Link -and $state.Cl -and $state.Sdk)
@@ -260,7 +260,7 @@ function Confirm-BuildTools
         throw "winget missing"
     }
 
-    Write-Warn "Installing Visual Studio 2022 Build Tools (C++ workload + SDK)… (this can take a while)"
+    Write-Warn "Installing Visual Studio 2022 Build Tools (C++ workload + SDK)... (this can take a while)"
     $override = @(
         '--quiet','--wait','--norestart',
         '--add','Microsoft.VisualStudio.Workload.VCTools',
@@ -274,7 +274,7 @@ function Confirm-BuildTools
     if (-not ($state.Link -and $state.Cl -and $state.Sdk))
     {
         Write-Err "MSVC/SDK still not detected after install."
-        Write-Info "Open 'Visual Studio Installer' → Modify 'Build Tools' → ensure 'C++ build tools' + a Windows 10/11 SDK are selected."
+        Write-Info "Open 'Visual Studio Installer' -> Modify 'Build Tools' -> ensure 'C++ build tools' + a Windows 10/11 SDK are selected."
         throw "Build tools not detected"
     }
 
@@ -308,7 +308,7 @@ function Confirm-Cargo
         Write-Err "Cargo is required for FRCW/BEN path. Exiting."
         exit 1
     }
-    Write-Info "Installing Rust/Cargo (rustup)…"
+    Write-Info "Installing Rust/Cargo (rustup)..."
     try
     {
         if (Test-Command -Name 'winget')
@@ -440,7 +440,7 @@ foreach ($seed in $RngSeeds)
         $exampleCli = Join-Path $topdir (Join-Path 'pipeline_scripts' 'example_cli.py')
         $graphPath  = Join-Path $topdir (Join-Path 'JSON_dualgraphs' 'gerrymandria.json')
 
-        # Build args as an array (NO backticks → no shifting)
+        # Build args as an array
         $arguments = @(
             'run', '--project', $topdir, $exampleCli,
             '--graph-path', $graphPath,
@@ -466,7 +466,7 @@ foreach ($seed in $RngSeeds)
     $jobs += $job
 }
 
-Write-Progress -Activity "Running jobs" -Status "Waiting for completion…"
+Write-Progress -Activity "Running jobs" -Status "Waiting for completion..."
 Wait-Job -Job $jobs
 Receive-Job -Job $jobs -Keep | Out-Null
 Write-Progress -Activity "Running jobs" -Completed
@@ -1119,10 +1119,10 @@ function Main
     {
         Confirm-BuildTools
         Confirm-Cargo
-        Write-Info "Installing FRCW from latest git commit…"
+        Write-Info "Installing FRCW from latest git commit..."
         & cargo install --git "https://github.com/mggg/frcw.rs" --branch "main"
         Write-OK "FRCW installed."
-        Write-Info "Installing binary-ensemble…"
+        Write-Info "Installing binary-ensemble..."
         & cargo install binary-ensemble
         Write-OK "binary-ensemble installed."
     } else
@@ -1131,7 +1131,7 @@ function Main
         if ($ans -match '^(y|Y)$')
         {
             Confirm-Cargo
-            Write-Info "Installing binary-ensemble…"
+            Write-Info "Installing binary-ensemble..."
             & cargo install binary-ensemble
             Write-OK "binary-ensemble installed."
         }
@@ -1153,7 +1153,7 @@ function Main
     & uv init --python $pythonVersion
 
     Write-OK "Project $projectName initialized with uv ($pythonVersion)."
-    Write-Info "Adding standard packages to pyproject.toml…"
+    Write-Info "Adding standard packages to pyproject.toml..."
 
     # Remove default files uv created (if present)
     Remove-Item -Force -ErrorAction SilentlyContinue "README.md","main.py"

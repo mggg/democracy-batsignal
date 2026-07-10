@@ -4,7 +4,7 @@ from joblib import Parallel, delayed
 from joblib_progress import joblib_progress
 import numpy as np
 from pathlib import Path
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_split_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     n_samples = len(decoder)
     samples = list(range(1, n_samples + 1))
 

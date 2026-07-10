@@ -5,7 +5,6 @@ SCRIPT_DIR=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
 plan_name="district"
 n_steps=1000
 seed=42
-target_pop=8
 tol=0.01
 pop_col="TOTPOP"
 json_dir="JSON_dualgraphs"

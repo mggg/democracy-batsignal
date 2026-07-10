@@ -8,7 +8,7 @@ import jsonlines as jl
 import click
 import numpy as np
 from pathlib import Path
-from pyben import PyBenEncoder
+from binary_ensemble.stream import BenEncoder
 import sys
 
 
@@ -91,7 +91,7 @@ def main(
                     )
 
         case "ben":
-            with PyBenEncoder(output_path, overwrite=True) as encoder:
+            with BenEncoder(output_path, overwrite=True) as encoder:
                 for partition in chain.with_progress_bar():
                     assignment_series = partition.assignment.to_series()
                     ordered_assignment = (

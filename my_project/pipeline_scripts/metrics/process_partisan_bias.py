@@ -4,7 +4,7 @@ from joblib_progress import joblib_progress
 from pathlib import Path
 import geopandas as gpd
 import numpy as np
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -19,8 +19,10 @@ def compute_score(sample_idx, assignment_vector, vote_arrays):
     out = {"sample": sample_idx, "pb_scores": {}}
 
     for dem_votes, rep_votes, name in vote_arrays:
-        dem_tot = np.bincount(assign, weights=dem_votes, minlength=k)
-        rep_tot = np.bincount(assign, weights=rep_votes, minlength=k)
+        # assignments are 1-indexed, so drop bin 0 to keep the phantom empty
+        # district out of mean_share
+        dem_tot = np.bincount(assign, weights=dem_votes, minlength=k + 1)[1:]
+        rep_tot = np.bincount(assign, weights=rep_votes, minlength=k + 1)[1:]
 
         total = dem_tot + rep_tot
         dem_share = np.divide(
@@ -41,7 +43,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_partisan_bias_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     n_samples = len(decoder)
     samples = list(range(1, n_samples + 1))
 

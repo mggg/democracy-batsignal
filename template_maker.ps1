@@ -369,7 +369,8 @@ foreach ($seed in $RngSeeds) {
     --pop-col       "TOTPOP" `
     --rng-seed      $seed `
     --population-tolerance 0.01 `
-    --total-steps   $TotalSteps *> $logFile
+    --total-steps   $TotalSteps `
+    --writeas "jsonl" *> $logFile
 }
 
 foreach ($seed in $RngSeeds2) {
@@ -527,7 +528,7 @@ param([switch]$Recurse = $true)
 $files = Get-ChildItem -File -Filter *.jsonl -Recurse:$Recurse
 foreach ($f in $files) {
   Write-Host "Processing $($f.FullName)"
-  & ben -m encode $f.FullName -v -w
+  & ben encode $f.FullName -v -w
 }
 '@
 }
@@ -540,7 +541,8 @@ param([switch]$Recurse = $true)
 $files = Get-ChildItem -File -Filter *.ben -Recurse:$Recurse
 foreach ($f in $files) {
   Write-Host "Processing $($f.FullName)"
-  & ben -m x-encode $f.FullName -v -w
+  # -c -1 lets the XZ encoder use every available core
+  & ben xencode $f.FullName -v -w -c -1
 }
 '@
 }
@@ -562,7 +564,7 @@ import jsonlines as jl
 import click
 import numpy as np
 from pathlib import Path
-from pyben import PyBenEncoder
+from binary_ensemble.stream import BenEncoder
 import sys
 
 
@@ -645,7 +647,7 @@ def main(
                     )
 
         case "ben":
-            with PyBenEncoder(output_path, overwrite=True) as encoder:
+            with BenEncoder(output_path, overwrite=True) as encoder:
                 for partition in chain.with_progress_bar():
                     assignment_series = partition.assignment.to_series()
                     ordered_assignment = (
@@ -677,7 +679,7 @@ from joblib_progress import joblib_progress
 from pathlib import Path
 import geopandas as gpd
 import numpy as np
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -692,8 +694,10 @@ def compute_score(sample_idx, assignment_vector, vote_arrays):
     out = {"sample": sample_idx, "pb_scores": {}}
 
     for dem_votes, rep_votes, name in vote_arrays:
-        dem_tot = np.bincount(assign, weights=dem_votes, minlength=k)
-        rep_tot = np.bincount(assign, weights=rep_votes, minlength=k)
+        # assignments are 1-indexed, so drop bin 0 to keep the phantom empty
+        # district out of mean_share
+        dem_tot = np.bincount(assign, weights=dem_votes, minlength=k + 1)[1:]
+        rep_tot = np.bincount(assign, weights=rep_votes, minlength=k + 1)[1:]
 
         total = dem_tot + rep_tot
         dem_share = np.divide(
@@ -714,7 +718,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_partisan_bias_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     n_samples = len(decoder)
     samples = list(range(1, n_samples + 1))
 
@@ -767,7 +771,7 @@ from joblib import Parallel, delayed
 from joblib_progress import joblib_progress
 import numpy as np
 from pathlib import Path
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -789,7 +793,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_polsby_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     total_chain_length = len(decoder)
 
     if n_samples > total_chain_length:
@@ -798,6 +802,7 @@ if __name__ == "__main__":
         )
         n_samples = total_chain_length
 
+    np.random.seed(42)  # seed so the subsample is reproducible
     subsamples = sorted(
         map(
             int, np.random.choice(total_chain_length, size=n_samples, replace=False) + 1
@@ -839,7 +844,7 @@ from joblib_progress import joblib_progress
 import geopandas as gpd
 import numpy as np
 from pathlib import Path
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -871,7 +876,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_reock_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     total_chain_length = len(decoder)
 
     if n_samples > total_chain_length:
@@ -880,6 +885,7 @@ if __name__ == "__main__":
         )
         n_samples = total_chain_length
 
+    np.random.seed(42)  # seed so the subsample is reproducible
     subsamples = sorted(
         map(
             int, np.random.choice(total_chain_length, size=n_samples, replace=False) + 1
@@ -921,7 +927,7 @@ from joblib import Parallel, delayed
 from joblib_progress import joblib_progress
 import numpy as np
 from pathlib import Path
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -956,7 +962,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_split_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     n_samples = len(decoder)
     samples = list(range(1, n_samples + 1))
 
@@ -1020,7 +1026,7 @@ from joblib_progress import joblib_progress
 import numpy as np
 import geopandas as gpd
 from pathlib import Path
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -1032,6 +1038,7 @@ def compute_score(
     assignment_vector,
     dem_count_matrix,
     rep_count_matrix,
+    race_names,
 ):
     assignment = np.asarray(assignment_vector, dtype=np.int32)
     race_totals = {name: 0 for name in race_names}
@@ -1045,7 +1052,7 @@ def compute_score(
         for i, race in enumerate(race_names):
             race_totals[race] += 1 if dem_wins[i] else 0
 
-    return ({"sample": sample_idx, "scores": race_totals},)
+    return {"sample": sample_idx, "scores": race_totals}
 
 
 if __name__ == "__main__":
@@ -1055,7 +1062,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_dem_win_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     n_samples = len(decoder)
     samples = list(range(1, n_samples + 1))
 
@@ -1087,7 +1094,9 @@ if __name__ == "__main__":
             scores = Parallel(
                 n_jobs=os.cpu_count() or 1,
             )(
-                delayed(compute_score)(idx, vec, dem_count_matrix, rep_count_matrix)
+                delayed(compute_score)(
+                    idx, vec, dem_count_matrix, rep_count_matrix, race_names
+                )
                 for idx, vec in pairs
             )
 
@@ -1119,12 +1128,15 @@ function Main
     {
         Confirm-BuildTools
         Confirm-Cargo
-        Write-Info "Installing FRCW from latest git commit..."
-        & cargo install --git "https://github.com/mggg/frcw.rs" --branch "main" --force
+        Write-Info "Installing FRCW (rustrecom, branch 0.1.4)..."
+        & cargo install --git "https://github.com/mggg/rustrecom" --branch "0.1.4" --force
         Write-OK "FRCW installed."
         Write-Info "Installing binary-ensemble..."
         & cargo install binary-ensemble --force
         Write-OK "binary-ensemble installed."
+        Write-Info "Installing ben-process (metrics engine)..."
+        & cargo install --git "https://github.com/peterrrock2/ben-process" --force
+        Write-OK "ben-process installed."
     } else
     {
         $ans = Read-Host "Would you like to use BEN in this project? (y/[n])"
@@ -1134,6 +1146,9 @@ function Main
             Write-Info "Installing binary-ensemble..."
             & cargo install binary-ensemble --force
             Write-OK "binary-ensemble installed."
+            Write-Info "Installing ben-process (metrics engine)..."
+            & cargo install --git "https://github.com/peterrrock2/ben-process" --force
+            Write-OK "ben-process installed."
         }
     }
 
@@ -1160,10 +1175,11 @@ function Main
 
     # Add deps (include jsonlines used by example script)
     & uv add numpy pandas matplotlib seaborn "gerrychain[geo]" maup ipykernel `
-        ipywidgets click gerrytools binary-ensemble joblib joblib-progress docker
+        ipywidgets click gerrytools "binary-ensemble>=1.0" jsonlines joblib `
+        joblib-progress docker
 
     # Formatter that I like
-    & uv add tool black
+    & uv add --dev black
 
     # Create directories
     $dirs = @(

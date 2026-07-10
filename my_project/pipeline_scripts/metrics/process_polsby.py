@@ -5,7 +5,7 @@ from joblib import Parallel, delayed
 from joblib_progress import joblib_progress
 import numpy as np
 from pathlib import Path
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_polsby_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     total_chain_length = len(decoder)
 
     if n_samples > total_chain_length:
@@ -36,6 +36,7 @@ if __name__ == "__main__":
         )
         n_samples = total_chain_length
 
+    np.random.seed(42)  # seed so the subsample is reproducible
     subsamples = sorted(
         map(
             int, np.random.choice(total_chain_length, size=n_samples, replace=False) + 1

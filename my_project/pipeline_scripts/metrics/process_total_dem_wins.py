@@ -5,7 +5,7 @@ from joblib_progress import joblib_progress
 import numpy as np
 import geopandas as gpd
 from pathlib import Path
-from pyben import PyBenDecoder
+from binary_ensemble.stream import BenDecoder
 import os
 
 script_dir = Path(__file__).parent
@@ -17,6 +17,7 @@ def compute_score(
     assignment_vector,
     dem_count_matrix,
     rep_count_matrix,
+    race_names,
 ):
     assignment = np.asarray(assignment_vector, dtype=np.int32)
     race_totals = {name: 0 for name in race_names}
@@ -30,7 +31,7 @@ def compute_score(
         for i, race in enumerate(race_names):
             race_totals[race] += 1 if dem_wins[i] else 0
 
-    return ({"sample": sample_idx, "scores": race_totals},)
+    return {"sample": sample_idx, "scores": race_totals}
 
 
 if __name__ == "__main__":
@@ -40,7 +41,7 @@ if __name__ == "__main__":
     GRAPH_PATH = f"{top_dir}/JSON_dualgraphs/MN_precincts.geojson"
     OUTPUT_PATH = f"{top_dir}/stats/MN_dem_win_scores.jsonl"
 
-    decoder = PyBenDecoder(CHAIN_FILE)
+    decoder = BenDecoder(CHAIN_FILE)
     n_samples = len(decoder)
     samples = list(range(1, n_samples + 1))
 
@@ -72,7 +73,9 @@ if __name__ == "__main__":
             scores = Parallel(
                 n_jobs=os.cpu_count() or 1,
             )(
-                delayed(compute_score)(idx, vec, dem_count_matrix, rep_count_matrix)
+                delayed(compute_score)(
+                    idx, vec, dem_count_matrix, rep_count_matrix, race_names
+                )
                 for idx, vec in pairs
             )
 

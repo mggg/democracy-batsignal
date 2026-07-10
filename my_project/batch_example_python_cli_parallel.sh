@@ -87,7 +87,8 @@ function start_job() {
         --pop-col "TOTPOP" \
         --rng-seed "$seed" \
         --population-tolerance 0.01 \
-        --total-steps "$n_steps" > "./chain_logs/log_parallel_rng_seed_$seed.log" 2>&1 &
+        --total-steps "$n_steps" \
+        --writeas "jsonl" > "${TOPDIR}/chain_logs/log_parallel_rng_seed_$seed.log" 2>&1 &
     pids+=("$!")
 }
 

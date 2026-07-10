@@ -19,7 +19,7 @@ for seed in "${rng_seeds[@]}"; do
         --rng-seed $seed \
         --population-tolerance 0.01 \
         --total-steps $n_steps \
-        --writeas "jsonl" > "./chain_logs/log_simple_rng_seed_$seed.log" 2>&1
+        --writeas "jsonl" > "${TOPDIR}/chain_logs/log_simple_rng_seed_$seed.log" 2>&1
 done
 
 

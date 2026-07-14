@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
-SCRIPT_DIR=$(dirname "$(realpath "${BASH_SOURCE[0]}")")
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 # Change this as needed to get the top level directory of the repo
-TOPDIR=$(realpath "${SCRIPT_DIR}")
+TOPDIR="${SCRIPT_DIR}"
+
+mkdir -p "${TOPDIR}/chain_outputs" "${TOPDIR}/chain_logs"
 
 export PYTHONHASHSEED=0
 # source .env # <- This will also work

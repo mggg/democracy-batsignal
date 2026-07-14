@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-# This script converts a JSONL file to a BEN file using the BEN cli tool.
+# This script converts every JSONL file next to it to a BEN file using the BEN cli tool.
 # Documentation at: https://crates.io/crates/binary-ensemble
 
-find . -type f -name '*.jsonl' -exec ben encode -v -w {} \;
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+
+find "${SCRIPT_DIR}" -type f -name '*.jsonl' -exec ben encode -v -w {} \;

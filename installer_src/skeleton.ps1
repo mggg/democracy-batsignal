@@ -1,0 +1,463 @@
+# ---------------------------------------------------------------------------
+# THIS FILE IS GENERATED from installer_src/skeleton.ps1 and template/.
+# Edit those sources and run 'python3 generate_installers.py' instead of
+# editing this script directly.
+# ---------------------------------------------------------------------------
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+
+# =====================================
+# ========  UTILITY FUNCTIONS  ========
+# =====================================
+
+function Write-Info($msg)
+{ Write-Host "[*] $msg" -ForegroundColor Cyan 
+}
+function Write-OK($msg)
+{ Write-Host "[OK] $msg" -ForegroundColor Green 
+}
+function Write-Warn($msg)
+{ Write-Host "[!] $msg" -ForegroundColor Yellow 
+}
+function Write-Err($msg)
+{ Write-Host "[X] $msg" -ForegroundColor Red 
+}
+
+function Test-Command
+{
+    param([Parameter(Mandatory)][string]$Name)
+    return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
+}
+
+function Invoke-WithRetry
+{
+    param(
+        [Parameter(Mandatory)] [scriptblock] $Action,
+        [int] $MaxAttempts = 5,
+        [int] $InitialDelaySeconds = 2
+    )
+
+    $attempt = 1
+    $delay = $InitialDelaySeconds
+
+    while ($true)
+    {
+        try
+        {
+            return & $Action
+        } catch
+        {
+            if ($attempt -ge $MaxAttempts)
+            {
+                throw  # rethrow last error after max attempts
+            }
+
+            Write-Warn "Attempt $attempt failed: $($_.Exception.Message)"
+            Write-Info "Retrying in $delay seconds..."
+            Start-Sleep -Seconds $delay
+
+            $attempt++
+            # simple backoff (cap it a bit)
+            $delay = [Math]::Min($delay * 2, 30)
+        }
+    }
+}
+
+# ====================================================
+# ========  SOFTWARE CHECKERS AND INSTALLERS  ========
+# ====================================================
+
+function Confirm-Uv
+{
+    if (Test-Command -Name 'uv')
+    { return 
+    }
+    $choice = Read-Host "uv not found. Install it now? (y/[n])"
+    if ($choice -notin @('y','Y'))
+    {
+        Write-Err "uv is required to run this script. Exiting."
+        exit 1
+    }
+    Write-Info "Installing uv..."
+    try
+    {
+        # Recommended installer
+        Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+        # Common install path
+        $uvBin = Join-Path $HOME ".local\bin"
+        if (Test-Path $uvBin)
+        { $env:Path = "$uvBin;$env:Path" 
+        }
+    } catch
+    {
+        Write-Err "uv installation failed. See https://docs.astral.sh/uv/getting-started/installation/"
+        throw
+    }
+    if (-not (Test-Command -Name 'uv'))
+    {
+        Write-Err "uv still not found on PATH after install."
+        throw "uv not found"
+    }
+    Write-OK "uv installed."
+}
+
+function Confirm-BuildTools
+{
+    param(
+        [bool]$InstallIfMissing = $true,
+        [bool]$RequireWinSDK    = $true
+    )
+
+    function Test-CppToolchain
+    {
+        $hasLink = [bool](Get-Command link.exe -ErrorAction SilentlyContinue)
+        $hasCl   = [bool](Get-Command cl.exe   -ErrorAction SilentlyContinue)
+
+
+        if (-not $RequireWinSDK)
+        {
+            $sdkOk = $true
+        } else
+        {
+            $sdkOk = $false
+        }
+
+        if ($RequireWinSDK)
+        {
+            $candidates = @()
+
+            # 1) Registry
+            try
+            {
+                $roots = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots' -ErrorAction Stop
+                if ($roots -and $roots.PSObject.Properties.Name -contains 'KitsRoot10')
+                {
+                    $candidates += $roots.KitsRoot10
+                }
+            } catch
+            { 
+            }
+
+            # 2) Env var
+            if ($env:WindowsSdkDir)
+            { $candidates += $env:WindowsSdkDir 
+            }
+
+            # 3) Common locations
+            $candidates += @(
+                'C:\Program Files (x86)\Windows Kits\10\',
+                'C:\Program Files\Windows Kits\10\'
+            )
+
+            foreach ($root in $candidates | Where-Object { $_ -and (Test-Path $_) })
+            {
+                if (Test-Path (Join-Path $root 'Lib'))
+                { $sdkOk = $true; break 
+                }
+            }
+        }
+
+        [pscustomobject]@{
+            Link = $hasLink
+            Cl   = $hasCl
+            Sdk  = $sdkOk
+        }
+    }
+
+    function Update-MsvcPath
+    {
+        $pf86 = ${env:ProgramFiles(x86)}
+        if (-not $pf86)
+        { return 
+        }
+        $vswhere = Join-Path $pf86 'Microsoft Visual Studio\Installer\vswhere.exe'
+        if (-not (Test-Path $vswhere))
+        { return 
+        }
+
+        $vsPath = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath 2>$null
+        if (-not $vsPath)
+        { return 
+        }
+
+        $toolRoot = Join-Path $vsPath 'VC\Tools\MSVC'
+        if (-not (Test-Path $toolRoot))
+        { return 
+        }
+
+        $latest = Get-ChildItem $toolRoot -Directory | Sort-Object Name -Descending | Select-Object -First 1
+        if (-not $latest)
+        { return 
+        }
+
+        $binCandidates = @(
+            Join-Path $latest.FullName 'bin\Hostx64\x64'
+            Join-Path $latest.FullName 'bin\Hostx86\x64'
+            Join-Path $latest.FullName 'bin\Hostx64\x86'
+            Join-Path $latest.FullName 'bin\Hostx86\x86'
+        ) | Where-Object { Test-Path $_ }
+
+        foreach ($bin in $binCandidates)
+        {
+            $escaped = [regex]::Escape($bin)
+            if ($env:Path -notmatch "(^|;)$escaped(;|$)")
+            {
+                $env:Path = "$bin;$env:Path"
+            }
+        }
+    }
+
+    Write-Info "Checking MSVC toolchain (cl/link) and Windows SDK..."
+    Update-MsvcPath
+    $state = Test-CppToolchain
+    if ($state.Link -and $state.Cl -and $state.Sdk)
+    {
+        Write-OK "MSVC & Windows SDK detected."
+        if (Get-Command rustup -ErrorAction SilentlyContinue)
+        {
+            try
+            { & rustup default stable-x86_64-pc-windows-msvc | Out-Null 
+            } catch
+            {
+            }
+        }
+        return $true
+    }
+
+    if (-not $InstallIfMissing)
+    {
+        Write-Err "MSVC build tools or Windows SDK missing."
+        throw "Build tools not present."
+    }
+
+    if (-not (Test-Command -Name 'winget'))
+    {
+        Write-Err "winget not found. Install Build Tools manually via Visual Studio Installer."
+        throw "winget missing"
+    }
+
+    Write-Warn "Installing Visual Studio 2022 Build Tools (C++ workload + SDK)... (this can take a while)"
+    $override = @(
+        '--quiet','--wait','--norestart',
+        '--add','Microsoft.VisualStudio.Workload.VCTools',
+        '--includeRecommended'
+    ) -join ' '
+
+    winget install --id Microsoft.VisualStudio.2022.BuildTools -e --source winget --override "$override"
+
+    Update-MsvcPath
+    $state = Test-CppToolchain
+    if (-not ($state.Link -and $state.Cl -and $state.Sdk))
+    {
+        Write-Err "MSVC/SDK still not detected after install."
+        Write-Info "Open 'Visual Studio Installer' -> Modify 'Build Tools' -> ensure 'C++ build tools' + a Windows 10/11 SDK are selected."
+        throw "Build tools not detected"
+    }
+
+    Write-OK "MSVC build tools ready."
+    if (Test-Command -Name 'rustup')
+    {
+        try
+        {
+            & rustup default stable-x86_64-pc-windows-msvc | Out-Null
+            & rustup component add rustfmt clippy | Out-Null
+        } catch
+        {
+        }
+    }
+    return $true
+}
+
+function Confirm-Cargo
+{
+    if (Test-Command -Name 'cargo')
+    {
+        $cargoBin = Join-Path $HOME ".cargo\bin"
+        if (Test-Path $cargoBin)
+        { $env:Path = "$cargoBin;$env:Path" 
+        }
+        return
+    }
+    $choice = Read-Host "Cargo not found. Install Rust/Cargo via rustup now? (y/[n])"
+    if ($choice -notin @('y','Y'))
+    {
+        Write-Err "Cargo is required for FRCW/BEN path. Exiting."
+        exit 1
+    }
+    Write-Info "Installing Rust/Cargo (rustup)..."
+    try
+    {
+        if (Test-Command -Name 'winget')
+        {
+            winget install Rustlang.Rustup -e --accept-source-agreements --accept-package-agreements
+        } else
+        {
+            $tmp = Join-Path $env:TEMP "rustup-init.exe"
+            Invoke-WebRequest "https://win.rustup.rs/x86_64" -OutFile $tmp
+            & $tmp -y
+        }
+        $cargoBin = Join-Path $HOME ".cargo\bin"
+        if (Test-Path $cargoBin)
+        { $env:Path = "$cargoBin;$env:Path" 
+        }
+    } catch
+    {
+        Write-Err "Rust/Cargo installation failed. Install from https://www.rust-lang.org/tools/install and re-run."
+        throw
+    }
+    if (-not (Test-Command -Name 'cargo'))
+    {
+        Write-Err "cargo still not found on PATH."
+        throw "cargo not found"
+    }
+    Write-OK "Rust and Cargo installed."
+}
+
+# ==================================================
+# ========  EMBEDDED PROJECT FILES  ================
+# ==================================================
+
+# {{GENERATED_PAYLOADS}}
+
+# Writes every embedded project file into the current (project) directory.
+function Write-PayloadFiles
+{
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    foreach ($rel in $Payloads.Keys)
+    {
+        $destDir = Split-Path -Path $rel -Parent
+        if (-not [string]::IsNullOrWhiteSpace($destDir))
+        {
+            New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+        }
+        # BOM-less UTF-8: PS5's Out-File -Encoding UTF8 writes a BOM, which
+        # e.g. json parsers reject
+        $dest = Join-Path (Get-Location).Path $rel
+        [IO.File]::WriteAllText($dest, $Payloads[$rel] + "`n", $utf8NoBom)
+    }
+}
+
+# ==============================================
+# ========  MAIN INSTALLATION FUNCTION  ========
+# ==============================================
+
+function Main
+{
+    Confirm-Uv
+
+    $projectName = Read-Host "Enter the name of the new project to create"
+    if ([string]::IsNullOrWhiteSpace($projectName))
+    {
+        $projectName = "my_project"
+        Write-Warn "No project name provided. Using default: $projectName"
+    }
+
+    $useFrcw = Read-Host "Would you like to use FRCW in this project? (y/[n])"
+    if ($useFrcw -match '^(y|Y)$')
+    {
+        Confirm-BuildTools
+        Confirm-Cargo
+        Write-Info "Installing FRCW (rustrecom, branch 0.1.4)..."
+        & cargo install --git "https://github.com/mggg/rustrecom" --branch "0.1.4" --force
+        Write-OK "FRCW installed."
+        Write-Info "Installing binary-ensemble..."
+        & cargo install binary-ensemble --force
+        Write-OK "binary-ensemble installed."
+        Write-Info "Installing ben-process (metrics engine)..."
+        & cargo install --git "https://github.com/peterrrock2/ben-process" --force
+        Write-OK "ben-process installed."
+    } else
+    {
+        $ans = Read-Host "Would you like to use BEN in this project? (y/[n])"
+        if ($ans -match '^(y|Y)$')
+        {
+            Confirm-Cargo
+            Write-Info "Installing binary-ensemble..."
+            & cargo install binary-ensemble --force
+            Write-OK "binary-ensemble installed."
+            Write-Info "Installing ben-process (metrics engine)..."
+            & cargo install --git "https://github.com/peterrrock2/ben-process" --force
+            Write-OK "ben-process installed."
+        }
+    }
+
+    $pythonVersion = Read-Host "What python version would you like (3.11, 3.12, 3.13)? (default: 3.11)"
+    if ($pythonVersion -notmatch '^(3\.11|3\.12|3\.13)$')
+    {
+        Write-Warn "Invalid python version. Using default 3.11."
+        $pythonVersion = '3.11'
+    }
+
+    Write-Info "Creating project: $projectName"
+    New-Item -ItemType Directory -Force -Path $projectName | Out-Null
+    Push-Location $projectName
+
+    # Ensure uv Python and init
+    & uv python install $pythonVersion
+    & uv init --python $pythonVersion
+
+    Write-OK "Project $projectName initialized with uv ($pythonVersion)."
+    Write-Info "Adding standard packages to pyproject.toml..."
+
+    # Remove default files uv created (if present)
+    Remove-Item -Force -ErrorAction SilentlyContinue "README.md","main.py"
+
+    # Add deps (include jsonlines used by example script)
+    & uv add numpy pandas matplotlib seaborn "gerrychain[geo]" maup ipykernel `
+        ipywidgets click gerrytools "binary-ensemble>=1.0" jsonlines joblib `
+        joblib-progress docker
+
+    # Formatter that I like
+    & uv add --dev black
+
+    # Create directories
+    $dirs = @(
+        "data","JSON_dualgraphs","notebooks","pipeline_scripts",
+        "figures","stats","chain_outputs","chain_logs","dev_files"
+    )
+    $dirs | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
+
+    # .gitignore
+    Add-Content -Path ".gitignore" -Value "dev_files"
+
+    # .env (uv --env-file expects KEY=VALUE lines; no 'export')
+    Add-Content -Path ".env" -Value "PYTHONHASHSEED=0"
+
+    Write-Info "Writing project files..."
+    Write-PayloadFiles
+
+    Write-Info "Downloading MN_precincts.geojson..."
+    $destDir = "JSON_dualgraphs"
+    $uri = "https://github.com/mggg/GerryChain/raw/main/docs/_static/MN.zip"
+
+    Invoke-WithRetry -MaxAttempts 5 -Action {
+
+        # create a temp *zip* path (PS5 Expand-Archive checks extension)
+        $tmpZip = Join-Path $env:TEMP ("MN_" + [guid]::NewGuid().ToString() + ".zip")
+
+        try
+        {
+            Invoke-WebRequest -Uri $uri -OutFile $tmpZip -UseBasicParsing
+            Expand-Archive -LiteralPath $tmpZip -DestinationPath $destDir -Force
+        } finally
+        {
+            Remove-Item -LiteralPath $tmpZip -ErrorAction SilentlyContinue
+        }
+    }
+
+    Write-OK "Your project is ready!"
+    Write-Warn "If 'uv' or 'cargo' commands are not recognized in *new* shells, log out/in or ensure these are on PATH:"
+    Write-Host "  $HOME\.local\bin"
+    Write-Host "  $HOME\.cargo\bin"
+    Pop-Location
+}
+
+
+if ($MyInvocation.InvocationName -ne '.')
+{
+    Main
+}

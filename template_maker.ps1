@@ -1,3 +1,9 @@
+# ---------------------------------------------------------------------------
+# THIS FILE IS GENERATED from installer_src/skeleton.ps1 and template/.
+# Edit those sources and run 'python3 generate_installers.py' instead of
+# editing this script directly.
+# ---------------------------------------------------------------------------
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -23,32 +29,6 @@ function Test-Command
 {
     param([Parameter(Mandatory)][string]$Name)
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
-}
-
-function Confirm-Realpath
-{
-    if (-not (Test-Command -Name 'Resolve-Path'))
-    {
-        Write-Err "Resolve-Path not available. Please update PowerShell."
-        throw "Resolve-Path missing"
-    }
-}
-
-function New-FileUtf8
-{
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][string]$Path,
-        [Parameter(Mandatory)][string]$Content
-    )
-
-    $dir = Split-Path -Path $Path -Parent
-    if ([string]::IsNullOrWhiteSpace($dir))
-    { $dir = '.' 
-    }
-
-    New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    $Content | Out-File -FilePath $Path -Encoding UTF8 -Force
 }
 
 function Invoke-WithRetry
@@ -337,223 +317,1658 @@ function Confirm-Cargo
     Write-OK "Rust and Cargo installed."
 }
 
-# =====================================
-# ========  MAIN PWSH SCRIPTS  ========
-# =====================================
+# ==================================================
+# ========  EMBEDDED PROJECT FILES  ================
+# ==================================================
 
-function Write-BatchExampleSimple
+# ====  GENERATED PAYLOADS (from template/) -- DO NOT EDIT BY HAND  ====
+# ====  regenerate with: python3 generate_installers.py             ====
+
+$Payloads = [ordered]@{
+'JSON_dualgraphs/gerrymandria.json' = @'
 {
-    @'
-param(
-  [int[]]$RngSeeds = @(42,43,44),
-  [int]$TotalSteps = 1000,
-  [int[]]$RngSeeds2 = @(42),
-  [int]$TotalSteps2 = 100000
-)
-
-$TOPDIR = (Resolve-Path $PSScriptRoot).Path
-$env:PYTHONHASHSEED = '0'
-
-$chainOut  = Join-Path $TOPDIR 'chain_outputs'
-$chainLogs = Join-Path $TOPDIR 'chain_logs'
-New-Item -ItemType Directory -Force -Path $chainOut,$chainLogs | Out-Null
-
-foreach ($seed in $RngSeeds) {
-  $outFile = Join-Path $chainOut  "gerrymandria_chain_${TotalSteps}_steps_seed$seed.jsonl"
-  $logFile = Join-Path $chainLogs "log_simple_rng_seed_$seed.log"
-
-  & uv run (Join-Path "$TOPDIR" (Join-Path "pipeline_scripts" "example_cli.py")) `
-    --graph-path   (Join-Path "$TOPDIR" (Join-Path "JSON_dualgraphs" "gerrymandria.json")) `
-    --output-path  "$outFile" `
-    --starting-plan "district" `
-    --pop-col       "TOTPOP" `
-    --rng-seed      $seed `
-    --population-tolerance 0.01 `
-    --total-steps   $TotalSteps `
-    --writeas "jsonl" *> $logFile
-}
-
-foreach ($seed in $RngSeeds2) {
-  $outFile = Join-Path (Join-Path $TOPDIR "chain_outputs") ("MN_chain_{0}_steps_seed{1}.jsonl.ben" -f $TotalSteps2, $seed)
-
-  & uv run (Join-Path $TOPDIR (Join-Path "pipeline_scripts" "example_cli.py")) `
-    --graph-path   (Join-Path $TOPDIR (Join-Path "JSON_dualgraphs" "MN_precincts.geojson")) `
-    --output-path  $outFile `
-    --starting-plan "CONGDIST" `
-    --pop-col       "TOTPOP" `
-    --rng-seed      $seed `
-    --population-tolerance 0.05 `
-    --total-steps   $TotalSteps2 `
-    --writeas "ben"
-}
-'@
-}
-
-function Write-BatchExampleParallel
-{
-    @'
-param(
-    [int]$MaxJobs = [Environment]::ProcessorCount,
-    [int[]]$RngSeeds = 1..50,
-    [int]$TotalSteps = 1000
-)
-
-$TOPDIR = (Resolve-Path $PSScriptRoot).Path
-$env:PYTHONHASHSEED = '0'
-
-$chainOut  = Join-Path $TOPDIR 'chain_outputs'
-$chainLogs = Join-Path $TOPDIR 'chain_logs'
-New-Item -ItemType Directory -Force -Path $chainOut, $chainLogs | Out-Null
-
-# Resolve uv once so jobs don't depend on profile PATH
-$uvExe = (Get-Command uv -ErrorAction Stop).Source
-
-$jobs = @()
-
-foreach ($seed in $RngSeeds)
-{
-
-    # throttle
-    while (($jobs | Where-Object State -eq 'Running').Count -ge $MaxJobs)
-    {
-        Start-Sleep -Milliseconds 200
-        $done = $jobs | Where-Object State -in 'Completed','Failed','Stopped'
-        if ($done)
+    "directed": false,
+    "multigraph": false,
+    "graph": [],
+    "nodes": [
         {
-            Receive-Job -Job $done -Keep | Out-Null
-            $jobs = $jobs | Where-Object State -in 'Running','NotStarted'
+            "TOTPOP": 1,
+            "x": 0,
+            "y": 0,
+            "county": "1",
+            "district": "1",
+            "precinct": 0,
+            "muni": "1",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 0
+        },
+        {
+            "TOTPOP": 1,
+            "x": 0,
+            "y": 1,
+            "county": "1",
+            "district": "1",
+            "precinct": 1,
+            "muni": "1",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 1
+        },
+        {
+            "TOTPOP": 1,
+            "x": 0,
+            "y": 2,
+            "county": "1",
+            "district": "1",
+            "precinct": 2,
+            "muni": "5",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 2
+        },
+        {
+            "TOTPOP": 1,
+            "x": 0,
+            "y": 3,
+            "county": "1",
+            "district": "1",
+            "precinct": 3,
+            "muni": "5",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 3
+        },
+        {
+            "TOTPOP": 1,
+            "x": 0,
+            "y": 4,
+            "county": "3",
+            "district": "1",
+            "precinct": 4,
+            "muni": "9",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 4
+        },
+        {
+            "TOTPOP": 1,
+            "x": 0,
+            "y": 5,
+            "county": "3",
+            "district": "1",
+            "precinct": 5,
+            "muni": "9",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 5
+        },
+        {
+            "TOTPOP": 1,
+            "x": 0,
+            "y": 6,
+            "county": "3",
+            "district": "1",
+            "precinct": 6,
+            "muni": "13",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 6
+        },
+        {
+            "TOTPOP": 1,
+            "x": 0,
+            "y": 7,
+            "county": "3",
+            "district": "1",
+            "precinct": 7,
+            "muni": "13",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 7
+        },
+        {
+            "TOTPOP": 1,
+            "x": 1,
+            "y": 0,
+            "county": "1",
+            "district": "2",
+            "precinct": 8,
+            "muni": "1",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "2",
+            "id": 8
+        },
+        {
+            "TOTPOP": 1,
+            "x": 1,
+            "y": 1,
+            "county": "1",
+            "district": "2",
+            "precinct": 9,
+            "muni": "1",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "2",
+            "id": 9
+        },
+        {
+            "TOTPOP": 1,
+            "x": 1,
+            "y": 2,
+            "county": "1",
+            "district": "2",
+            "precinct": 10,
+            "muni": "5",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "2",
+            "id": 10
+        },
+        {
+            "TOTPOP": 1,
+            "x": 1,
+            "y": 3,
+            "county": "1",
+            "district": "2",
+            "precinct": 11,
+            "muni": "5",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "2",
+            "id": 11
+        },
+        {
+            "TOTPOP": 1,
+            "x": 1,
+            "y": 4,
+            "county": "3",
+            "district": "2",
+            "precinct": 12,
+            "muni": "9",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "2",
+            "id": 12
+        },
+        {
+            "TOTPOP": 1,
+            "x": 1,
+            "y": 5,
+            "county": "3",
+            "district": "2",
+            "precinct": 13,
+            "muni": "9",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "2",
+            "id": 13
+        },
+        {
+            "TOTPOP": 1,
+            "x": 1,
+            "y": 6,
+            "county": "3",
+            "district": "2",
+            "precinct": 14,
+            "muni": "13",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 14
+        },
+        {
+            "TOTPOP": 1,
+            "x": 1,
+            "y": 7,
+            "county": "3",
+            "district": "2",
+            "precinct": 15,
+            "muni": "13",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "4",
+            "id": 15
+        },
+        {
+            "TOTPOP": 1,
+            "x": 2,
+            "y": 0,
+            "county": "1",
+            "district": "3",
+            "precinct": 16,
+            "muni": "2",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "4",
+            "id": 16
+        },
+        {
+            "TOTPOP": 1,
+            "x": 2,
+            "y": 1,
+            "county": "1",
+            "district": "3",
+            "precinct": 17,
+            "muni": "2",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 17
+        },
+        {
+            "TOTPOP": 1,
+            "x": 2,
+            "y": 2,
+            "county": "1",
+            "district": "3",
+            "precinct": 18,
+            "muni": "6",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "2",
+            "id": 18
+        },
+        {
+            "TOTPOP": 1,
+            "x": 2,
+            "y": 3,
+            "county": "1",
+            "district": "3",
+            "precinct": 19,
+            "muni": "6",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "2",
+            "id": 19
+        },
+        {
+            "TOTPOP": 1,
+            "x": 2,
+            "y": 4,
+            "county": "3",
+            "district": "3",
+            "precinct": 20,
+            "muni": "10",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 20
+        },
+        {
+            "TOTPOP": 1,
+            "x": 2,
+            "y": 5,
+            "county": "3",
+            "district": "3",
+            "precinct": 21,
+            "muni": "10",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 21
+        },
+        {
+            "TOTPOP": 1,
+            "x": 2,
+            "y": 6,
+            "county": "3",
+            "district": "3",
+            "precinct": 22,
+            "muni": "14",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 22
+        },
+        {
+            "TOTPOP": 1,
+            "x": 2,
+            "y": 7,
+            "county": "3",
+            "district": "3",
+            "precinct": 23,
+            "muni": "14",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "4",
+            "id": 23
+        },
+        {
+            "TOTPOP": 1,
+            "x": 3,
+            "y": 0,
+            "county": "1",
+            "district": "4",
+            "precinct": 24,
+            "muni": "2",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "4",
+            "id": 24
+        },
+        {
+            "TOTPOP": 1,
+            "x": 3,
+            "y": 1,
+            "county": "1",
+            "district": "4",
+            "precinct": 25,
+            "muni": "2",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 25
+        },
+        {
+            "TOTPOP": 1,
+            "x": 3,
+            "y": 2,
+            "county": "1",
+            "district": "4",
+            "precinct": 26,
+            "muni": "6",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 26
+        },
+        {
+            "TOTPOP": 1,
+            "x": 3,
+            "y": 3,
+            "county": "1",
+            "district": "4",
+            "precinct": 27,
+            "muni": "6",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 27
+        },
+        {
+            "TOTPOP": 1,
+            "x": 3,
+            "y": 4,
+            "county": "3",
+            "district": "4",
+            "precinct": 28,
+            "muni": "10",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 28
+        },
+        {
+            "TOTPOP": 1,
+            "x": 3,
+            "y": 5,
+            "county": "3",
+            "district": "4",
+            "precinct": 29,
+            "muni": "10",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 29
+        },
+        {
+            "TOTPOP": 1,
+            "x": 3,
+            "y": 6,
+            "county": "3",
+            "district": "4",
+            "precinct": 30,
+            "muni": "14",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 30
+        },
+        {
+            "TOTPOP": 1,
+            "x": 3,
+            "y": 7,
+            "county": "3",
+            "district": "4",
+            "precinct": 31,
+            "muni": "14",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "1",
+            "id": 31
+        },
+        {
+            "TOTPOP": 1,
+            "x": 4,
+            "y": 0,
+            "county": "2",
+            "district": "5",
+            "precinct": 32,
+            "muni": "3",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "3",
+            "id": 32
+        },
+        {
+            "TOTPOP": 1,
+            "x": 4,
+            "y": 1,
+            "county": "2",
+            "district": "5",
+            "precinct": 33,
+            "muni": "3",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "3",
+            "id": 33
+        },
+        {
+            "TOTPOP": 1,
+            "x": 4,
+            "y": 2,
+            "county": "2",
+            "district": "5",
+            "precinct": 34,
+            "muni": "7",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "3",
+            "id": 34
+        },
+        {
+            "TOTPOP": 1,
+            "x": 4,
+            "y": 3,
+            "county": "2",
+            "district": "5",
+            "precinct": 35,
+            "muni": "7",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 35
+        },
+        {
+            "TOTPOP": 1,
+            "x": 4,
+            "y": 4,
+            "county": "4",
+            "district": "5",
+            "precinct": 36,
+            "muni": "11",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 36
+        },
+        {
+            "TOTPOP": 1,
+            "x": 4,
+            "y": 5,
+            "county": "4",
+            "district": "5",
+            "precinct": 37,
+            "muni": "11",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 37
+        },
+        {
+            "TOTPOP": 1,
+            "x": 4,
+            "y": 6,
+            "county": "4",
+            "district": "5",
+            "precinct": 38,
+            "muni": "15",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 38
+        },
+        {
+            "TOTPOP": 1,
+            "x": 4,
+            "y": 7,
+            "county": "4",
+            "district": "5",
+            "precinct": 39,
+            "muni": "15",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "1",
+            "id": 39
+        },
+        {
+            "TOTPOP": 1,
+            "x": 5,
+            "y": 0,
+            "county": "2",
+            "district": "6",
+            "precinct": 40,
+            "muni": "3",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "3",
+            "id": 40
+        },
+        {
+            "TOTPOP": 1,
+            "x": 5,
+            "y": 1,
+            "county": "2",
+            "district": "6",
+            "precinct": 41,
+            "muni": "3",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "3",
+            "id": 41
+        },
+        {
+            "TOTPOP": 1,
+            "x": 5,
+            "y": 2,
+            "county": "2",
+            "district": "6",
+            "precinct": 42,
+            "muni": "7",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "3",
+            "id": 42
+        },
+        {
+            "TOTPOP": 1,
+            "x": 5,
+            "y": 3,
+            "county": "2",
+            "district": "6",
+            "precinct": 43,
+            "muni": "7",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "4",
+            "id": 43
+        },
+        {
+            "TOTPOP": 1,
+            "x": 5,
+            "y": 4,
+            "county": "4",
+            "district": "6",
+            "precinct": 44,
+            "muni": "11",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 44
+        },
+        {
+            "TOTPOP": 1,
+            "x": 5,
+            "y": 5,
+            "county": "4",
+            "district": "6",
+            "precinct": 45,
+            "muni": "11",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 45
+        },
+        {
+            "TOTPOP": 1,
+            "x": 5,
+            "y": 6,
+            "county": "4",
+            "district": "6",
+            "precinct": 46,
+            "muni": "15",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 46
+        },
+        {
+            "TOTPOP": 1,
+            "x": 5,
+            "y": 7,
+            "county": "4",
+            "district": "6",
+            "precinct": 47,
+            "muni": "15",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "1",
+            "id": 47
+        },
+        {
+            "TOTPOP": 1,
+            "x": 6,
+            "y": 0,
+            "county": "2",
+            "district": "7",
+            "precinct": 48,
+            "muni": "4",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "3",
+            "id": 48
+        },
+        {
+            "TOTPOP": 1,
+            "x": 6,
+            "y": 1,
+            "county": "2",
+            "district": "7",
+            "precinct": 49,
+            "muni": "4",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "3",
+            "id": 49
+        },
+        {
+            "TOTPOP": 1,
+            "x": 6,
+            "y": 2,
+            "county": "2",
+            "district": "7",
+            "precinct": 50,
+            "muni": "8",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "3",
+            "id": 50
+        },
+        {
+            "TOTPOP": 1,
+            "x": 6,
+            "y": 3,
+            "county": "2",
+            "district": "7",
+            "precinct": 51,
+            "muni": "8",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "3",
+            "id": 51
+        },
+        {
+            "TOTPOP": 1,
+            "x": 6,
+            "y": 4,
+            "county": "4",
+            "district": "7",
+            "precinct": 52,
+            "muni": "12",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "3",
+            "id": 52
+        },
+        {
+            "TOTPOP": 1,
+            "x": 6,
+            "y": 5,
+            "county": "4",
+            "district": "7",
+            "precinct": 53,
+            "muni": "12",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 53
+        },
+        {
+            "TOTPOP": 1,
+            "x": 6,
+            "y": 6,
+            "county": "4",
+            "district": "7",
+            "precinct": 54,
+            "muni": "16",
+            "boundary_node": false,
+            "boundary_perim": 0,
+            "water_dist": "1",
+            "id": 54
+        },
+        {
+            "TOTPOP": 1,
+            "x": 6,
+            "y": 7,
+            "county": "4",
+            "district": "7",
+            "precinct": 55,
+            "muni": "16",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "1",
+            "id": 55
+        },
+        {
+            "TOTPOP": 1,
+            "x": 7,
+            "y": 0,
+            "county": "2",
+            "district": "8",
+            "precinct": 56,
+            "muni": "4",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "3",
+            "id": 56
+        },
+        {
+            "TOTPOP": 1,
+            "x": 7,
+            "y": 1,
+            "county": "2",
+            "district": "8",
+            "precinct": 57,
+            "muni": "4",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "3",
+            "id": 57
+        },
+        {
+            "TOTPOP": 1,
+            "x": 7,
+            "y": 2,
+            "county": "2",
+            "district": "8",
+            "precinct": 58,
+            "muni": "8",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "3",
+            "id": 58
+        },
+        {
+            "TOTPOP": 1,
+            "x": 7,
+            "y": 3,
+            "county": "2",
+            "district": "8",
+            "precinct": 59,
+            "muni": "8",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "3",
+            "id": 59
+        },
+        {
+            "TOTPOP": 1,
+            "x": 7,
+            "y": 4,
+            "county": "4",
+            "district": "8",
+            "precinct": 60,
+            "muni": "12",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "3",
+            "id": 60
+        },
+        {
+            "TOTPOP": 1,
+            "x": 7,
+            "y": 5,
+            "county": "4",
+            "district": "8",
+            "precinct": 61,
+            "muni": "12",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "1",
+            "id": 61
+        },
+        {
+            "TOTPOP": 1,
+            "x": 7,
+            "y": 6,
+            "county": "4",
+            "district": "8",
+            "precinct": 62,
+            "muni": "16",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "1",
+            "id": 62
+        },
+        {
+            "TOTPOP": 1,
+            "x": 7,
+            "y": 7,
+            "county": "4",
+            "district": "8",
+            "precinct": 63,
+            "muni": "16",
+            "boundary_node": true,
+            "boundary_perim": 1,
+            "water_dist": "1",
+            "id": 63
         }
-    }
-
-    $outFile = Join-Path $chainOut ("gerrymandria_chain_{0}_steps_seed{1}.jsonl" -f $TotalSteps, $seed)
-    $logFile = Join-Path $chainLogs ("log_parallel_rng_seed_{0}.log" -f $seed)
-
-    $job = Start-Job -Name "seed$seed" `
-        -ArgumentList $TOPDIR, $TotalSteps, $seed, $outFile, $logFile, $uvExe `
-        -ScriptBlock {
-        param($topdir, $nsteps, $seed, $outFile, $logFile, $uvExe)
-
-        Set-StrictMode -Version Latest
-        $ErrorActionPreference = 'Stop'
-        $env:PYTHONHASHSEED = '0'
-
-        # Cross-platform paths
-        $exampleCli = Join-Path $topdir (Join-Path 'pipeline_scripts' 'example_cli.py')
-        $graphPath  = Join-Path $topdir (Join-Path 'JSON_dualgraphs' 'gerrymandria.json')
-
-        # Build args as an array
-        $arguments = @(
-            'run', '--project', $topdir, $exampleCli,
-            '--graph-path', $graphPath,
-            '--output-path', $outFile,
-            '--starting-plan', 'district',
-            '--pop-col', 'TOTPOP',
-            '--rng-seed', $seed,
-            '--population-tolerance', '0.01',
-            '--total-steps', $nsteps,
-            '--writeas', 'jsonl'
-        )
-
-        try
-        {
-            & $uvExe @arguments *> $logFile
-        } catch
-        {
-            $_ | Out-String | Add-Content $logFile
-            throw
-        }
-    }
-
-    $jobs += $job
+    ],
+    "adjacency": [
+        [
+            {
+                "id": 8
+            },
+            {
+                "id": 1
+            }
+        ],
+        [
+            {
+                "id": 0
+            },
+            {
+                "id": 9
+            },
+            {
+                "id": 2
+            }
+        ],
+        [
+            {
+                "id": 1
+            },
+            {
+                "id": 10
+            },
+            {
+                "id": 3
+            }
+        ],
+        [
+            {
+                "id": 2
+            },
+            {
+                "id": 11
+            },
+            {
+                "id": 4
+            }
+        ],
+        [
+            {
+                "id": 3
+            },
+            {
+                "id": 12
+            },
+            {
+                "id": 5
+            }
+        ],
+        [
+            {
+                "id": 4
+            },
+            {
+                "id": 13
+            },
+            {
+                "id": 6
+            }
+        ],
+        [
+            {
+                "id": 5
+            },
+            {
+                "id": 14
+            },
+            {
+                "id": 7
+            }
+        ],
+        [
+            {
+                "id": 6
+            },
+            {
+                "id": 15
+            }
+        ],
+        [
+            {
+                "id": 0
+            },
+            {
+                "id": 16
+            },
+            {
+                "id": 9
+            }
+        ],
+        [
+            {
+                "id": 1
+            },
+            {
+                "id": 8
+            },
+            {
+                "id": 17
+            },
+            {
+                "id": 10
+            }
+        ],
+        [
+            {
+                "id": 2
+            },
+            {
+                "id": 9
+            },
+            {
+                "id": 18
+            },
+            {
+                "id": 11
+            }
+        ],
+        [
+            {
+                "id": 3
+            },
+            {
+                "id": 10
+            },
+            {
+                "id": 19
+            },
+            {
+                "id": 12
+            }
+        ],
+        [
+            {
+                "id": 4
+            },
+            {
+                "id": 11
+            },
+            {
+                "id": 20
+            },
+            {
+                "id": 13
+            }
+        ],
+        [
+            {
+                "id": 5
+            },
+            {
+                "id": 12
+            },
+            {
+                "id": 21
+            },
+            {
+                "id": 14
+            }
+        ],
+        [
+            {
+                "id": 6
+            },
+            {
+                "id": 13
+            },
+            {
+                "id": 22
+            },
+            {
+                "id": 15
+            }
+        ],
+        [
+            {
+                "id": 7
+            },
+            {
+                "id": 14
+            },
+            {
+                "id": 23
+            }
+        ],
+        [
+            {
+                "id": 8
+            },
+            {
+                "id": 24
+            },
+            {
+                "id": 17
+            }
+        ],
+        [
+            {
+                "id": 9
+            },
+            {
+                "id": 16
+            },
+            {
+                "id": 25
+            },
+            {
+                "id": 18
+            }
+        ],
+        [
+            {
+                "id": 10
+            },
+            {
+                "id": 17
+            },
+            {
+                "id": 26
+            },
+            {
+                "id": 19
+            }
+        ],
+        [
+            {
+                "id": 11
+            },
+            {
+                "id": 18
+            },
+            {
+                "id": 27
+            },
+            {
+                "id": 20
+            }
+        ],
+        [
+            {
+                "id": 12
+            },
+            {
+                "id": 19
+            },
+            {
+                "id": 28
+            },
+            {
+                "id": 21
+            }
+        ],
+        [
+            {
+                "id": 13
+            },
+            {
+                "id": 20
+            },
+            {
+                "id": 29
+            },
+            {
+                "id": 22
+            }
+        ],
+        [
+            {
+                "id": 14
+            },
+            {
+                "id": 21
+            },
+            {
+                "id": 30
+            },
+            {
+                "id": 23
+            }
+        ],
+        [
+            {
+                "id": 15
+            },
+            {
+                "id": 22
+            },
+            {
+                "id": 31
+            }
+        ],
+        [
+            {
+                "id": 16
+            },
+            {
+                "id": 32
+            },
+            {
+                "id": 25
+            }
+        ],
+        [
+            {
+                "id": 17
+            },
+            {
+                "id": 24
+            },
+            {
+                "id": 33
+            },
+            {
+                "id": 26
+            }
+        ],
+        [
+            {
+                "id": 18
+            },
+            {
+                "id": 25
+            },
+            {
+                "id": 34
+            },
+            {
+                "id": 27
+            }
+        ],
+        [
+            {
+                "id": 19
+            },
+            {
+                "id": 26
+            },
+            {
+                "id": 35
+            },
+            {
+                "id": 28
+            }
+        ],
+        [
+            {
+                "id": 20
+            },
+            {
+                "id": 27
+            },
+            {
+                "id": 36
+            },
+            {
+                "id": 29
+            }
+        ],
+        [
+            {
+                "id": 21
+            },
+            {
+                "id": 28
+            },
+            {
+                "id": 37
+            },
+            {
+                "id": 30
+            }
+        ],
+        [
+            {
+                "id": 22
+            },
+            {
+                "id": 29
+            },
+            {
+                "id": 38
+            },
+            {
+                "id": 31
+            }
+        ],
+        [
+            {
+                "id": 23
+            },
+            {
+                "id": 30
+            },
+            {
+                "id": 39
+            }
+        ],
+        [
+            {
+                "id": 24
+            },
+            {
+                "id": 40
+            },
+            {
+                "id": 33
+            }
+        ],
+        [
+            {
+                "id": 25
+            },
+            {
+                "id": 32
+            },
+            {
+                "id": 41
+            },
+            {
+                "id": 34
+            }
+        ],
+        [
+            {
+                "id": 26
+            },
+            {
+                "id": 33
+            },
+            {
+                "id": 42
+            },
+            {
+                "id": 35
+            }
+        ],
+        [
+            {
+                "id": 27
+            },
+            {
+                "id": 34
+            },
+            {
+                "id": 43
+            },
+            {
+                "id": 36
+            }
+        ],
+        [
+            {
+                "id": 28
+            },
+            {
+                "id": 35
+            },
+            {
+                "id": 44
+            },
+            {
+                "id": 37
+            }
+        ],
+        [
+            {
+                "id": 29
+            },
+            {
+                "id": 36
+            },
+            {
+                "id": 45
+            },
+            {
+                "id": 38
+            }
+        ],
+        [
+            {
+                "id": 30
+            },
+            {
+                "id": 37
+            },
+            {
+                "id": 46
+            },
+            {
+                "id": 39
+            }
+        ],
+        [
+            {
+                "id": 31
+            },
+            {
+                "id": 38
+            },
+            {
+                "id": 47
+            }
+        ],
+        [
+            {
+                "id": 32
+            },
+            {
+                "id": 48
+            },
+            {
+                "id": 41
+            }
+        ],
+        [
+            {
+                "id": 33
+            },
+            {
+                "id": 40
+            },
+            {
+                "id": 49
+            },
+            {
+                "id": 42
+            }
+        ],
+        [
+            {
+                "id": 34
+            },
+            {
+                "id": 41
+            },
+            {
+                "id": 50
+            },
+            {
+                "id": 43
+            }
+        ],
+        [
+            {
+                "id": 35
+            },
+            {
+                "id": 42
+            },
+            {
+                "id": 51
+            },
+            {
+                "id": 44
+            }
+        ],
+        [
+            {
+                "id": 36
+            },
+            {
+                "id": 43
+            },
+            {
+                "id": 52
+            },
+            {
+                "id": 45
+            }
+        ],
+        [
+            {
+                "id": 37
+            },
+            {
+                "id": 44
+            },
+            {
+                "id": 53
+            },
+            {
+                "id": 46
+            }
+        ],
+        [
+            {
+                "id": 38
+            },
+            {
+                "id": 45
+            },
+            {
+                "id": 54
+            },
+            {
+                "id": 47
+            }
+        ],
+        [
+            {
+                "id": 39
+            },
+            {
+                "id": 46
+            },
+            {
+                "id": 55
+            }
+        ],
+        [
+            {
+                "id": 40
+            },
+            {
+                "id": 56
+            },
+            {
+                "id": 49
+            }
+        ],
+        [
+            {
+                "id": 41
+            },
+            {
+                "id": 48
+            },
+            {
+                "id": 57
+            },
+            {
+                "id": 50
+            }
+        ],
+        [
+            {
+                "id": 42
+            },
+            {
+                "id": 49
+            },
+            {
+                "id": 58
+            },
+            {
+                "id": 51
+            }
+        ],
+        [
+            {
+                "id": 43
+            },
+            {
+                "id": 50
+            },
+            {
+                "id": 59
+            },
+            {
+                "id": 52
+            }
+        ],
+        [
+            {
+                "id": 44
+            },
+            {
+                "id": 51
+            },
+            {
+                "id": 60
+            },
+            {
+                "id": 53
+            }
+        ],
+        [
+            {
+                "id": 45
+            },
+            {
+                "id": 52
+            },
+            {
+                "id": 61
+            },
+            {
+                "id": 54
+            }
+        ],
+        [
+            {
+                "id": 46
+            },
+            {
+                "id": 53
+            },
+            {
+                "id": 62
+            },
+            {
+                "id": 55
+            }
+        ],
+        [
+            {
+                "id": 47
+            },
+            {
+                "id": 54
+            },
+            {
+                "id": 63
+            }
+        ],
+        [
+            {
+                "id": 48
+            },
+            {
+                "id": 57
+            }
+        ],
+        [
+            {
+                "id": 49
+            },
+            {
+                "id": 56
+            },
+            {
+                "id": 58
+            }
+        ],
+        [
+            {
+                "id": 50
+            },
+            {
+                "id": 57
+            },
+            {
+                "id": 59
+            }
+        ],
+        [
+            {
+                "id": 51
+            },
+            {
+                "id": 58
+            },
+            {
+                "id": 60
+            }
+        ],
+        [
+            {
+                "id": 52
+            },
+            {
+                "id": 59
+            },
+            {
+                "id": 61
+            }
+        ],
+        [
+            {
+                "id": 53
+            },
+            {
+                "id": 60
+            },
+            {
+                "id": 62
+            }
+        ],
+        [
+            {
+                "id": 54
+            },
+            {
+                "id": 61
+            },
+            {
+                "id": 63
+            }
+        ],
+        [
+            {
+                "id": 55
+            },
+            {
+                "id": 62
+            }
+        ]
+    ]
 }
-
-Write-Progress -Activity "Running jobs" -Status "Waiting for completion..."
-Wait-Job -Job $jobs
-Receive-Job -Job $jobs -Keep | Out-Null
-Write-Progress -Activity "Running jobs" -Completed
-
 '@
-}
-
-function Write-RustShExample
-{
-    @'
-param(
-  [string]$PlanName = 'district',
-  [int]$n_steps = 1000,
-  [int]$seed = 42,
-  [double]$tol = 0.01,
-  [string]$pop_col = 'TOTPOP'
-)
-
-# Project root is the parent of this script's folder
-$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-
-$json_dir   = Join-Path $ProjectRoot 'JSON_dualgraphs'
-$output_dir = Join-Path $ProjectRoot 'chain_outputs'
-
-# Ensure output dir exists
-New-Item -ItemType Directory -Force -Path $output_dir | Out-Null
-
-# Build JSON path (don't Resolve-Path until we know it exists)
-$json_file = Join-Path $json_dir 'gerrymandria.json'
-
-if (-not (Test-Path $json_file)) {
-  Write-Error "Could not find graph JSON at: $json_file`nDid the bootstrap step download it?"
-  exit 1
-}
-
-$final_output_file = Join-Path $output_dir ("gerrymandria_chain_{0}_steps.jsonl.ben" -f $n_steps)
-
-& frcw `
-  --assignment-col $PlanName `
-  --graph-json $json_file `
-  --n-steps $n_steps `
-  --pop-col $pop_col `
-  --rng-seed $seed `
-  --tol $tol `
-  --variant district-pairs-rmst `
-  --writer ben `
-  --batch-size 1 `
-  --n-threads 1 `
-  --output-file $final_output_file
-'@
-}
-
-function Write-JsonlToBen
-{
-    @'
-param([switch]$Recurse = $true)
-
-$files = Get-ChildItem -File -Filter *.jsonl -Recurse:$Recurse
-foreach ($f in $files) {
-  Write-Host "Processing $($f.FullName)"
-  & ben encode $f.FullName -v -w
-}
-'@
-}
-
-function Write-BenToXben
-{
-    @'
-param([switch]$Recurse = $true)
-
-$files = Get-ChildItem -File -Filter *.ben -Recurse:$Recurse
-foreach ($f in $files) {
-  Write-Host "Processing $($f.FullName)"
-  # -c -1 lets the XZ encoder use every available core
-  & ben xencode $f.FullName -v -w -c -1
-}
-'@
-}
-
-# =====================================
-# ========  PYTHON CLI SCRIPT  ========
-# =====================================
-
-function Write-BasicCliGerrychain
-{
-    @'
+'pipeline_scripts/example_cli.py' = @'
 from gerrychain import Graph, Partition, MarkovChain
 from gerrychain.updaters import Tally
 from gerrychain.accept import always_accept
@@ -662,17 +2077,7 @@ def main(
 if __name__ == "__main__":
     main()
 '@
-}
-
-
-# =============================================
-# ========  PYTHON PIPELINE FUNCTIONS  ========
-# =============================================
-
-
-function Write-PythonProcessPartisanBias
-{
-    @'
+'pipeline_scripts/metrics/process_partisan_bias.py' = @'
 import jsonlines as jl
 from joblib import Parallel, delayed
 from joblib_progress import joblib_progress
@@ -758,12 +2163,7 @@ if __name__ == "__main__":
     with jl.open(OUTPUT_PATH, "w") as writer:
         writer.write_all(all_scores)
 '@
-}
-
-
-function Write-PythonProcessPolsby
-{
-    @'
+'pipeline_scripts/metrics/process_polsby.py' = @'
 import jsonlines as jl
 from gerrychain import GeographicPartition, Graph
 from gerrychain.metrics import polsby_popper
@@ -832,12 +2232,7 @@ if __name__ == "__main__":
     with jl.open(OUTPUT_PATH, "w") as writer:
         writer.write_all(all_scores)
 '@
-}
-
-
-function Write-PythonProcessReock
-{
-    @'
+'pipeline_scripts/metrics/process_reock.py' = @'
 import jsonlines as jl
 from joblib import Parallel, delayed
 from joblib_progress import joblib_progress
@@ -916,11 +2311,7 @@ if __name__ == "__main__":
     with jl.open(OUTPUT_PATH, "w") as writer:
         writer.write_all(all_scores)
 '@
-}
-
-function Write-PythonProcessSplits
-{
-    @'
+'pipeline_scripts/metrics/process_splits.py' = @'
 import jsonlines as jl
 from gerrychain import Graph
 from joblib import Parallel, delayed
@@ -1013,12 +2404,7 @@ if __name__ == "__main__":
     with jl.open(OUTPUT_PATH, "w") as writer:
         writer.write_all(all_scores)
 '@
-}
-
-
-function Write-PythonProcessTotalDemWins
-{
-    @'
+'pipeline_scripts/metrics/process_total_dem_wins.py' = @'
 import jsonlines as jl
 from gerrychain import Graph
 from joblib import Parallel, delayed
@@ -1105,6 +2491,215 @@ if __name__ == "__main__":
     with jl.open(OUTPUT_PATH, "w") as writer:
         writer.write_all(all_scores)
 '@
+'batch_example_python_cli_parallel.ps1' = @'
+param(
+    [int]$MaxJobs = [Environment]::ProcessorCount,
+    [int[]]$RngSeeds = 1..50,
+    [int]$TotalSteps = 1000
+)
+
+$TOPDIR = (Resolve-Path $PSScriptRoot).Path
+$env:PYTHONHASHSEED = '0'
+
+$chainOut  = Join-Path $TOPDIR 'chain_outputs'
+$chainLogs = Join-Path $TOPDIR 'chain_logs'
+New-Item -ItemType Directory -Force -Path $chainOut, $chainLogs | Out-Null
+
+# Resolve uv once so jobs don't depend on profile PATH
+$uvExe = (Get-Command uv -ErrorAction Stop).Source
+
+$jobs = @()
+
+foreach ($seed in $RngSeeds)
+{
+
+    # throttle
+    while (($jobs | Where-Object State -eq 'Running').Count -ge $MaxJobs)
+    {
+        Start-Sleep -Milliseconds 200
+        $done = $jobs | Where-Object State -in 'Completed','Failed','Stopped'
+        if ($done)
+        {
+            Receive-Job -Job $done -Keep | Out-Null
+            $jobs = $jobs | Where-Object State -in 'Running','NotStarted'
+        }
+    }
+
+    $outFile = Join-Path $chainOut ("gerrymandria_chain_{0}_steps_seed{1}.jsonl" -f $TotalSteps, $seed)
+    $logFile = Join-Path $chainLogs ("log_parallel_rng_seed_{0}.log" -f $seed)
+
+    $job = Start-Job -Name "seed$seed" `
+        -ArgumentList $TOPDIR, $TotalSteps, $seed, $outFile, $logFile, $uvExe `
+        -ScriptBlock {
+        param($topdir, $nsteps, $seed, $outFile, $logFile, $uvExe)
+
+        Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
+        $env:PYTHONHASHSEED = '0'
+
+        # Cross-platform paths
+        $exampleCli = Join-Path $topdir (Join-Path 'pipeline_scripts' 'example_cli.py')
+        $graphPath  = Join-Path $topdir (Join-Path 'JSON_dualgraphs' 'gerrymandria.json')
+
+        # Build args as an array
+        $arguments = @(
+            'run', '--project', $topdir, $exampleCli,
+            '--graph-path', $graphPath,
+            '--output-path', $outFile,
+            '--starting-plan', 'district',
+            '--pop-col', 'TOTPOP',
+            '--rng-seed', $seed,
+            '--population-tolerance', '0.01',
+            '--total-steps', $nsteps,
+            '--writeas', 'jsonl'
+        )
+
+        try
+        {
+            & $uvExe @arguments *> $logFile
+        } catch
+        {
+            $_ | Out-String | Add-Content $logFile
+            throw
+        }
+    }
+
+    $jobs += $job
+}
+
+Write-Progress -Activity "Running jobs" -Status "Waiting for completion..."
+Wait-Job -Job $jobs
+Receive-Job -Job $jobs -Keep | Out-Null
+Write-Progress -Activity "Running jobs" -Completed
+'@
+'batch_example_python_cli_simple.ps1' = @'
+param(
+  [int[]]$RngSeeds = @(42,43,44),
+  [int]$TotalSteps = 1000,
+  [int[]]$RngSeeds2 = @(42),
+  [int]$TotalSteps2 = 100000
+)
+
+$TOPDIR = (Resolve-Path $PSScriptRoot).Path
+$env:PYTHONHASHSEED = '0'
+
+$chainOut  = Join-Path $TOPDIR 'chain_outputs'
+$chainLogs = Join-Path $TOPDIR 'chain_logs'
+New-Item -ItemType Directory -Force -Path $chainOut,$chainLogs | Out-Null
+
+foreach ($seed in $RngSeeds) {
+  $outFile = Join-Path $chainOut  "gerrymandria_chain_${TotalSteps}_steps_seed$seed.jsonl"
+  $logFile = Join-Path $chainLogs "log_simple_rng_seed_$seed.log"
+
+  & uv run (Join-Path "$TOPDIR" (Join-Path "pipeline_scripts" "example_cli.py")) `
+    --graph-path   (Join-Path "$TOPDIR" (Join-Path "JSON_dualgraphs" "gerrymandria.json")) `
+    --output-path  "$outFile" `
+    --starting-plan "district" `
+    --pop-col       "TOTPOP" `
+    --rng-seed      $seed `
+    --population-tolerance 0.01 `
+    --total-steps   $TotalSteps `
+    --writeas "jsonl" *> $logFile
+}
+
+foreach ($seed in $RngSeeds2) {
+  $outFile = Join-Path (Join-Path $TOPDIR "chain_outputs") ("MN_chain_{0}_steps_seed{1}.jsonl.ben" -f $TotalSteps2, $seed)
+
+  & uv run (Join-Path $TOPDIR (Join-Path "pipeline_scripts" "example_cli.py")) `
+    --graph-path   (Join-Path $TOPDIR (Join-Path "JSON_dualgraphs" "MN_precincts.geojson")) `
+    --output-path  $outFile `
+    --starting-plan "CONGDIST" `
+    --pop-col       "TOTPOP" `
+    --rng-seed      $seed `
+    --population-tolerance 0.05 `
+    --total-steps   $TotalSteps2 `
+    --writeas "ben"
+}
+'@
+'chain_outputs/ben_to_xben.ps1' = @'
+param([switch]$Recurse = $true)
+
+# This script converts every BEN file next to it to an XBEN file using the BEN cli tool.
+# Documentation at: https://crates.io/crates/binary-ensemble
+
+$files = Get-ChildItem -Path $PSScriptRoot -File -Filter *.ben -Recurse:$Recurse
+foreach ($f in $files) {
+  Write-Host "Processing $($f.FullName)"
+  # -c -1 lets the XZ encoder use every available core
+  & ben xencode $f.FullName -v -w -c -1
+}
+'@
+'chain_outputs/jsonl_to_ben.ps1' = @'
+param([switch]$Recurse = $true)
+
+# This script converts every JSONL file next to it to a BEN file using the BEN cli tool.
+# Documentation at: https://crates.io/crates/binary-ensemble
+
+$files = Get-ChildItem -Path $PSScriptRoot -File -Filter *.jsonl -Recurse:$Recurse
+foreach ($f in $files) {
+  Write-Host "Processing $($f.FullName)"
+  & ben encode $f.FullName -v -w
+}
+'@
+'pipeline_scripts/rust_example_script.ps1' = @'
+param(
+  [string]$PlanName = 'district',
+  [int]$n_steps = 1000,
+  [int]$seed = 42,
+  [double]$tol = 0.01,
+  [string]$pop_col = 'TOTPOP'
+)
+
+# Project root is the parent of this script's folder
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+
+$json_dir   = Join-Path $ProjectRoot 'JSON_dualgraphs'
+$output_dir = Join-Path $ProjectRoot 'chain_outputs'
+
+# Ensure output dir exists
+New-Item -ItemType Directory -Force -Path $output_dir | Out-Null
+
+# Build JSON path (don't Resolve-Path until we know it exists)
+$json_file = Join-Path $json_dir 'gerrymandria.json'
+
+if (-not (Test-Path $json_file)) {
+  Write-Error "Could not find graph JSON at: $json_file`nDid the bootstrap step download it?"
+  exit 1
+}
+
+$final_output_file = Join-Path $output_dir ("gerrymandria_chain_{0}_steps.jsonl.ben" -f $n_steps)
+
+& frcw `
+  --assignment-col $PlanName `
+  --graph-json $json_file `
+  --n-steps $n_steps `
+  --pop-col $pop_col `
+  --rng-seed $seed `
+  --tol $tol `
+  --variant district-pairs-rmst `
+  --writer ben `
+  --batch-size 1 `
+  --n-threads 1 `
+  --output-file $final_output_file
+'@
+}
+
+# Writes every embedded project file into the current (project) directory.
+function Write-PayloadFiles
+{
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    foreach ($rel in $Payloads.Keys)
+    {
+        $destDir = Split-Path -Path $rel -Parent
+        if (-not [string]::IsNullOrWhiteSpace($destDir))
+        {
+            New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+        }
+        # BOM-less UTF-8: PS5's Out-File -Encoding UTF8 writes a BOM, which
+        # e.g. json parsers reject
+        $dest = Join-Path (Get-Location).Path $rel
+        [IO.File]::WriteAllText($dest, $Payloads[$rel] + "`n", $utf8NoBom)
+    }
 }
 
 # ==============================================
@@ -1113,7 +2708,6 @@ if __name__ == "__main__":
 
 function Main
 {
-    Confirm-Realpath
     Confirm-Uv
 
     $projectName = Read-Host "Enter the name of the new project to create"
@@ -1194,19 +2788,11 @@ function Main
     # .env (uv --env-file expects KEY=VALUE lines; no 'export')
     Add-Content -Path ".env" -Value "PYTHONHASHSEED=0"
 
-    # Download JSON file
-    Write-Info "Downloading gerrymandria.json..."
-    # Make sure destination exists
-    $uri = "https://raw.githubusercontent.com/mggg/GerryChain/refs/heads/main/docs/_static/gerrymandria.json"
-    $destDir = "JSON_dualgraphs"
-    $destFile = Join-Path $destDir "gerrymandria.json"
-    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-
-    Invoke-WithRetry -MaxAttempts 5 -Action {
-        Invoke-WebRequest -Uri $uri -OutFile $destFile -UseBasicParsing
-    }
+    Write-Info "Writing project files..."
+    Write-PayloadFiles
 
     Write-Info "Downloading MN_precincts.geojson..."
+    $destDir = "JSON_dualgraphs"
     $uri = "https://github.com/mggg/GerryChain/raw/main/docs/_static/MN.zip"
 
     Invoke-WithRetry -MaxAttempts 5 -Action {
@@ -1223,23 +2809,6 @@ function Main
             Remove-Item -LiteralPath $tmpZip -ErrorAction SilentlyContinue
         }
     }
-
-    # Write helper files (.ps1 since we're on Windows)
-    New-FileUtf8 -Path "pipeline_scripts\example_cli.py"          -Content (Write-BasicCliGerrychain)
-    New-FileUtf8 -Path "pipeline_scripts\rust_example_script.ps1"  -Content (Write-RustShExample)
-    New-FileUtf8 -Path "batch_example_python_cli_simple.ps1"       -Content (Write-BatchExampleSimple)
-    New-FileUtf8 -Path "batch_example_python_cli_parallel.ps1"     -Content (Write-BatchExampleParallel)
-    New-FileUtf8 -Path "chain_outputs\jsonl_to_ben.ps1"            -Content (Write-JsonlToBen)
-    New-FileUtf8 -Path "chain_outputs\ben_to_xben.ps1"             -Content (Write-BenToXben)
-
-    # Make the python processing scripts
-    New-Item -ItemType Directory -Force -Path "pipeline_scripts\metrics" | Out-Null
-    New-FileUtf8 -Path "pipeline_scripts\metrics\process_partisan_bias.py" -Content (Write-PythonProcessPartisanBias)
-    New-FileUtf8 -Path "pipeline_scripts\metrics\process_polsby.py"        -Content (Write-PythonProcessPolsby)
-    New-FileUtf8 -Path "pipeline_scripts\metrics\process_reock.py"         -Content (Write-PythonProcessReock)
-    New-FileUtf8 -Path "pipeline_scripts\metrics\process_splits.py"        -Content (Write-PythonProcessSplits)
-    New-FileUtf8 -Path "pipeline_scripts\metrics\process_total_dem_wins.py"  -Content (Write-PythonProcessTotalDemWins)
-
 
     Write-OK "Your project is ready!"
     Write-Warn "If 'uv' or 'cargo' commands are not recognized in *new* shells, log out/in or ensure these are on PATH:"

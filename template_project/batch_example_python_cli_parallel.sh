@@ -25,7 +25,7 @@ function spinner_start() {
     [ -t 1 ] || return 0
     local msg="$*"
     command -v tput > /dev/null && tput civis || true
-    (   
+    (
         local sp='-\|/' i=0
         while :; do
             printf "\r[%c] %s" "${sp:i++%4:1}" "$msg"

@@ -11,11 +11,10 @@ dev_files
 !my_project/
 !my_project/**
 
-!template/
-!template/**
+!template_project/
+!template_project/**
 
 !generate_installers.py
+!test_generate_installers.py
 !installer_src/
 !installer_src/**
-
-

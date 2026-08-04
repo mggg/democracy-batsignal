@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ---------------------------------------------------------------------------
-# THIS FILE IS GENERATED from installer_src/skeleton.sh and template/.
+# THIS FILE IS GENERATED from installer_src/skeleton.sh and template_project/.
 # Edit those sources and run 'python3 generate_installers.py' instead of
 # editing this script directly.
 # ---------------------------------------------------------------------------
@@ -111,26 +111,71 @@ function check_cargo_installed() {
 # ========  EMBEDDED PROJECT FILES  ================
 # ==================================================
 
-# ====  GENERATED PAYLOADS (from template/) -- DO NOT EDIT BY HAND  ====
-# ====  regenerate with: python3 generate_installers.py             ====
+# ====  GENERATED PAYLOADS (from template_project/) -- DO NOT EDIT BY HAND  ====
+# ====  regenerate with: python3 generate_installers.py                     ====
+
+payload_directories=(
+    "JSON_dualgraphs"
+    "chain_logs"
+    "chain_outputs"
+    "data"
+    "dev_files"
+    "figures"
+    "notebooks"
+    "pipeline_scripts"
+    "pipeline_scripts/metrics"
+    "stats"
+)
 
 payload_files=(
+    ".env"
+    ".gitignore"
+    ".python-version"
     "JSON_dualgraphs/gerrymandria.json"
+    "README.md"
+    "batch_example_python_cli_parallel.sh"
+    "batch_example_python_cli_simple.sh"
+    "chain_outputs/ben_to_xben.sh"
+    "chain_outputs/jsonl_to_ben.sh"
     "pipeline_scripts/example_cli.py"
     "pipeline_scripts/metrics/process_partisan_bias.py"
     "pipeline_scripts/metrics/process_polsby.py"
     "pipeline_scripts/metrics/process_reock.py"
     "pipeline_scripts/metrics/process_splits.py"
     "pipeline_scripts/metrics/process_total_dem_wins.py"
-    "batch_example_python_cli_parallel.sh"
-    "batch_example_python_cli_simple.sh"
-    "chain_outputs/ben_to_xben.sh"
-    "chain_outputs/jsonl_to_ben.sh"
     "pipeline_scripts/rust_example_script.sh"
+    "pyproject.toml"
 )
 
 function write_payload() {
     case "$1" in
+    ".env") cat << 'TEMPLATE_PAYLOAD_EOF'
+PYTHONHASHSEED=0
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    ".gitignore") cat << 'TEMPLATE_PAYLOAD_EOF'
+.venv/
+__pycache__/
+*.py[cod]
+uv.lock
+dev_files/*
+chain_logs/*
+chain_outputs/*
+figures/*
+stats/*
+
+!.gitkeep
+!dev_files/.gitkeep
+!chain_logs/.gitkeep
+!chain_outputs/.gitkeep
+!figures/.gitkeep
+!stats/.gitkeep
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    ".python-version") cat << 'TEMPLATE_PAYLOAD_EOF'
+3.11
+TEMPLATE_PAYLOAD_EOF
+        ;;
     "JSON_dualgraphs/gerrymandria.json") cat << 'TEMPLATE_PAYLOAD_EOF'
 {
     "directed": false,
@@ -1775,6 +1820,216 @@ function write_payload() {
 }
 TEMPLATE_PAYLOAD_EOF
         ;;
+    "README.md") cat << 'TEMPLATE_PAYLOAD_EOF'
+# Redistricting Project
+
+This project contains example scripts for running redistricting chains, converting
+ensemble files, and calculating common metrics.
+
+Install the Python environment with:
+
+```bash
+uv sync
+```
+
+The Bash and PowerShell helper scripts are both kept here so the project can be used as
+the source for the platform-specific Democracy Batsignal installers.
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    "batch_example_python_cli_parallel.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
+#!/usr/bin/env bash
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+# Change this as needed to get the top level directory of the repo
+TOPDIR="${SCRIPT_DIR}"
+
+mkdir -p "${TOPDIR}/chain_outputs" "${TOPDIR}/chain_logs"
+
+export PYTHONHASHSEED=0
+# source .env # <- This will also work
+
+# ===================================================================
+#   IGNORE THE FOLLOWING SECTION. IT JUST HELPS TO MANAGE RESOURCES
+# ===================================================================
+function count_cores() {
+    if command -v nproc > /dev/null 2>&1; then
+                                            nproc
+    elif [[ "${OSTYPE:-}" == darwin* ]]; then
+                                            sysctl -n hw.ncpu
+    else echo 1; fi
+}
+
+_spinner_pid=""
+function spinner_start() {
+    [ -t 1 ] || return 0
+    local msg="$*"
+    command -v tput > /dev/null && tput civis || true
+    (
+        local sp='-\|/' i=0
+        while :; do
+            printf "\r[%c] %s" "${sp:i++%4:1}" "$msg"
+            sleep 0.1
+        done
+    ) &
+      _spinner_pid=$!
+}
+function spinner_stop() {
+    [ -n "${_spinner_pid:-}" ] || return 0
+    kill "$_spinner_pid" 2> /dev/null || true
+    wait "$_spinner_pid" 2> /dev/null || true
+    _spinner_pid=""
+    if [ -t 1 ] && command -v tput > /dev/null; then tput cnorm; fi
+    printf "\r%*s\r" "$(tput cols 2> /dev/null || echo 80)" ""
+}
+
+declare -a pids=()
+
+function prune_pids() {
+    local live=() pid
+    for pid in "${pids[@]}"; do
+        kill -0 "$pid" 2> /dev/null && live+=("$pid")
+    done
+    pids=("${live[@]}")
+}
+
+function running_count() {
+    prune_pids
+    echo "${#pids[@]}"
+}
+
+function cleanup() {
+    # stop spinner, forward INT/TERM to children, reap
+    trap - INT TERM EXIT
+    spinner_stop
+    # kill whole process group to be extra sure:
+    kill -- -$$ 2> /dev/null || true
+    # also try direct PIDs we tracked
+    ((${#pids[@]})) && kill -INT "${pids[@]}" 2> /dev/null || true
+    wait 2> /dev/null || true
+}
+# Register cleanup function to be called on the EXIT signal
+trap cleanup INT TERM EXIT
+# ===============================================================
+# ===============================================================
+
+# Edit this to change the number of parallel jobs if you want
+MAX_JOBS=$(count_cores)
+
+rng_seeds=({1..50})
+n_steps=1000
+
+function start_job() {
+    local seed=$1  # rng seed is the first positional argument
+    local n_steps=$2 # number of steps is the second positional argument
+    uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
+        --graph-path "${TOPDIR}/JSON_dualgraphs/gerrymandria.json" \
+        --output-path "${TOPDIR}/chain_outputs/gerrymandria_chain_${n_steps}_steps_seed${seed}.jsonl" \
+        --starting-plan "district" \
+        --pop-col "TOTPOP" \
+        --rng-seed "$seed" \
+        --population-tolerance 0.01 \
+        --total-steps "$n_steps" \
+        --writeas "jsonl" > "${TOPDIR}/chain_logs/log_parallel_rng_seed_$seed.log" 2>&1 &
+    pids+=("$!")
+}
+
+# Launch with a simple concurrency gate
+for seed in "${rng_seeds[@]}"; do
+    # If we already have MAX_JOBS running, wait for one to finish
+    while (($(running_count) >= MAX_JOBS)); do
+        # show a spinner while we're blocked waiting
+        spinner_start "Waiting for a free slot: $(jobs -pr | wc -l)/$MAX_JOBS running..."
+        if wait -n 2> /dev/null; then
+            :
+        else
+            # fallback: wait on the oldest tracked PID, then drop it
+            if ((${#pids[@]})); then
+                wait "${pids[0]}" 2> /dev/null || true
+                pids=("${pids[@]:1}")
+            else
+                wait -p _ 2> /dev/null || true
+            fi
+        fi
+        spinner_stop
+        prune_pids
+    done
+    start_job "$seed" "$n_steps"
+done
+
+if (($(running_count) > 0)); then
+    spinner_start "Finishing remaining jobs..."
+    wait "${pids[@]}" 2> /dev/null || true
+    spinner_stop
+fi
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    "batch_example_python_cli_simple.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
+#!/usr/bin/env bash
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+# Change this as needed to get the top level directory of the repo
+TOPDIR="${SCRIPT_DIR}"
+
+mkdir -p "${TOPDIR}/chain_outputs" "${TOPDIR}/chain_logs"
+
+export PYTHONHASHSEED=0
+# source .env # <- This will also work
+
+rng_seeds=(42 43 44)
+n_steps=1000
+
+for seed in "${rng_seeds[@]}"; do
+    uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
+        --graph-path "${TOPDIR}/JSON_dualgraphs/gerrymandria.json" \
+        --output-path "${TOPDIR}/chain_outputs/gerrymandria_chain_${n_steps}_steps_seed${seed}.jsonl" \
+        --starting-plan "district" \
+        --pop-col "TOTPOP" \
+        --rng-seed $seed \
+        --population-tolerance 0.01 \
+        --total-steps $n_steps \
+        --writeas "jsonl" > "${TOPDIR}/chain_logs/log_simple_rng_seed_$seed.log" 2>&1
+done
+
+
+rng_seeds=(42)
+n_steps=100000
+
+for seed in "${rng_seeds[@]}"; do
+    uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
+        --graph-path "${TOPDIR}/JSON_dualgraphs/MN_precincts.geojson" \
+        --output-path "${TOPDIR}/chain_outputs/MN_chain_${n_steps}_steps_seed${seed}.jsonl.ben" \
+        --starting-plan "CONGDIST" \
+        --pop-col "TOTPOP" \
+        --rng-seed $seed \
+        --population-tolerance 0.05 \
+        --total-steps $n_steps \
+        --writeas "ben"
+done
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    "chain_outputs/ben_to_xben.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
+#!/usr/bin/env bash
+
+# This script converts every BEN file next to it to an XBEN file using the BEN cli tool.
+# Documentation at: https://crates.io/crates/binary-ensemble
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+
+# -c -1 lets the XZ encoder use every available core
+find "${SCRIPT_DIR}" -type f -name '*.ben' -exec ben xencode -v -w -c -1 {} \;
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    "chain_outputs/jsonl_to_ben.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
+#!/usr/bin/env bash
+
+# This script converts every JSONL file next to it to a BEN file using the BEN cli tool.
+# Documentation at: https://crates.io/crates/binary-ensemble
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+
+find "${SCRIPT_DIR}" -type f -name '*.jsonl' -exec ben encode -v -w {} \;
+TEMPLATE_PAYLOAD_EOF
+        ;;
     "pipeline_scripts/example_cli.py") cat << 'TEMPLATE_PAYLOAD_EOF'
 from gerrychain import Graph, Partition, MarkovChain
 from gerrychain.updaters import Tally
@@ -2304,200 +2559,6 @@ if __name__ == "__main__":
         writer.write_all(all_scores)
 TEMPLATE_PAYLOAD_EOF
         ;;
-    "batch_example_python_cli_parallel.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
-#!/usr/bin/env bash
-
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-# Change this as needed to get the top level directory of the repo
-TOPDIR="${SCRIPT_DIR}"
-
-mkdir -p "${TOPDIR}/chain_outputs" "${TOPDIR}/chain_logs"
-
-export PYTHONHASHSEED=0
-# source .env # <- This will also work
-
-# ===================================================================
-#   IGNORE THE FOLLOWING SECTION. IT JUST HELPS TO MANAGE RESOURCES
-# ===================================================================
-function count_cores() {
-    if command -v nproc > /dev/null 2>&1; then
-                                            nproc
-    elif [[ "${OSTYPE:-}" == darwin* ]]; then
-                                            sysctl -n hw.ncpu
-    else echo 1; fi
-}
-
-_spinner_pid=""
-function spinner_start() {
-    [ -t 1 ] || return 0
-    local msg="$*"
-    command -v tput > /dev/null && tput civis || true
-    (   
-        local sp='-\|/' i=0
-        while :; do
-            printf "\r[%c] %s" "${sp:i++%4:1}" "$msg"
-            sleep 0.1
-        done
-    ) &
-      _spinner_pid=$!
-}
-function spinner_stop() {
-    [ -n "${_spinner_pid:-}" ] || return 0
-    kill "$_spinner_pid" 2> /dev/null || true
-    wait "$_spinner_pid" 2> /dev/null || true
-    _spinner_pid=""
-    if [ -t 1 ] && command -v tput > /dev/null; then tput cnorm; fi
-    printf "\r%*s\r" "$(tput cols 2> /dev/null || echo 80)" ""
-}
-
-declare -a pids=()
-
-function prune_pids() {
-    local live=() pid
-    for pid in "${pids[@]}"; do
-        kill -0 "$pid" 2> /dev/null && live+=("$pid")
-    done
-    pids=("${live[@]}")
-}
-
-function running_count() {
-    prune_pids
-    echo "${#pids[@]}"
-}
-
-function cleanup() {
-    # stop spinner, forward INT/TERM to children, reap
-    trap - INT TERM EXIT
-    spinner_stop
-    # kill whole process group to be extra sure:
-    kill -- -$$ 2> /dev/null || true
-    # also try direct PIDs we tracked
-    ((${#pids[@]})) && kill -INT "${pids[@]}" 2> /dev/null || true
-    wait 2> /dev/null || true
-}
-# Register cleanup function to be called on the EXIT signal
-trap cleanup INT TERM EXIT
-# ===============================================================
-# ===============================================================
-
-# Edit this to change the number of parallel jobs if you want
-MAX_JOBS=$(count_cores)
-
-rng_seeds=({1..50})
-n_steps=1000
-
-function start_job() {
-    local seed=$1  # rng seed is the first positional argument
-    local n_steps=$2 # number of steps is the second positional argument
-    uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
-        --graph-path "${TOPDIR}/JSON_dualgraphs/gerrymandria.json" \
-        --output-path "${TOPDIR}/chain_outputs/gerrymandria_chain_${n_steps}_steps_seed${seed}.jsonl" \
-        --starting-plan "district" \
-        --pop-col "TOTPOP" \
-        --rng-seed "$seed" \
-        --population-tolerance 0.01 \
-        --total-steps "$n_steps" \
-        --writeas "jsonl" > "${TOPDIR}/chain_logs/log_parallel_rng_seed_$seed.log" 2>&1 &
-    pids+=("$!")
-}
-
-# Launch with a simple concurrency gate
-for seed in "${rng_seeds[@]}"; do
-    # If we already have MAX_JOBS running, wait for one to finish
-    while (($(running_count) >= MAX_JOBS)); do
-        # show a spinner while we're blocked waiting
-        spinner_start "Waiting for a free slot: $(jobs -pr | wc -l)/$MAX_JOBS running..."
-        if wait -n 2> /dev/null; then
-            :
-        else
-            # fallback: wait on the oldest tracked PID, then drop it
-            if ((${#pids[@]})); then
-                wait "${pids[0]}" 2> /dev/null || true
-                pids=("${pids[@]:1}")
-            else
-                wait -p _ 2> /dev/null || true
-            fi
-        fi
-        spinner_stop
-        prune_pids
-    done
-    start_job "$seed" "$n_steps"
-done
-
-if (($(running_count) > 0)); then
-    spinner_start "Finishing remaining jobs..."
-    wait "${pids[@]}" 2> /dev/null || true
-    spinner_stop
-fi
-TEMPLATE_PAYLOAD_EOF
-        ;;
-    "batch_example_python_cli_simple.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
-#!/usr/bin/env bash
-
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-# Change this as needed to get the top level directory of the repo
-TOPDIR="${SCRIPT_DIR}"
-
-mkdir -p "${TOPDIR}/chain_outputs" "${TOPDIR}/chain_logs"
-
-export PYTHONHASHSEED=0
-# source .env # <- This will also work
-
-rng_seeds=(42 43 44)
-n_steps=1000
-
-for seed in "${rng_seeds[@]}"; do
-    uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
-        --graph-path "${TOPDIR}/JSON_dualgraphs/gerrymandria.json" \
-        --output-path "${TOPDIR}/chain_outputs/gerrymandria_chain_${n_steps}_steps_seed${seed}.jsonl" \
-        --starting-plan "district" \
-        --pop-col "TOTPOP" \
-        --rng-seed $seed \
-        --population-tolerance 0.01 \
-        --total-steps $n_steps \
-        --writeas "jsonl" > "${TOPDIR}/chain_logs/log_simple_rng_seed_$seed.log" 2>&1
-done
-
-
-rng_seeds=(42)
-n_steps=100000
-
-for seed in "${rng_seeds[@]}"; do
-    uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
-        --graph-path "${TOPDIR}/JSON_dualgraphs/MN_precincts.geojson" \
-        --output-path "${TOPDIR}/chain_outputs/MN_chain_${n_steps}_steps_seed${seed}.jsonl.ben" \
-        --starting-plan "CONGDIST" \
-        --pop-col "TOTPOP" \
-        --rng-seed $seed \
-        --population-tolerance 0.05 \
-        --total-steps $n_steps \
-        --writeas "ben"
-done
-TEMPLATE_PAYLOAD_EOF
-        ;;
-    "chain_outputs/ben_to_xben.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
-#!/usr/bin/env bash
-
-# This script converts every BEN file next to it to an XBEN file using the BEN cli tool.
-# Documentation at: https://crates.io/crates/binary-ensemble
-
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-
-# -c -1 lets the XZ encoder use every available core
-find "${SCRIPT_DIR}" -type f -name '*.ben' -exec ben xencode -v -w -c -1 {} \;
-TEMPLATE_PAYLOAD_EOF
-        ;;
-    "chain_outputs/jsonl_to_ben.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
-#!/usr/bin/env bash
-
-# This script converts every JSONL file next to it to a BEN file using the BEN cli tool.
-# Documentation at: https://crates.io/crates/binary-ensemble
-
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
-
-find "${SCRIPT_DIR}" -type f -name '*.jsonl' -exec ben encode -v -w {} \;
-TEMPLATE_PAYLOAD_EOF
-        ;;
     "pipeline_scripts/rust_example_script.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
 #!/usr/bin/env bash
 
@@ -2536,12 +2597,46 @@ frcw \
     --output-file "${final_output_file}"
 TEMPLATE_PAYLOAD_EOF
         ;;
+    "pyproject.toml") cat << 'TEMPLATE_PAYLOAD_EOF'
+[project]
+name = "redistricting-project"
+version = "0.1.0"
+description = "A ready-to-run redistricting analysis project"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "binary-ensemble>=1.0",
+    "click",
+    "docker",
+    "gerrychain[geo]",
+    "gerrytools",
+    "ipykernel",
+    "ipywidgets",
+    "joblib",
+    "joblib-progress",
+    "jsonlines",
+    "matplotlib",
+    "maup",
+    "numpy",
+    "pandas",
+    "seaborn",
+]
+
+[dependency-groups]
+dev = [
+    "black",
+]
+TEMPLATE_PAYLOAD_EOF
+        ;;
     esac
 }
 
 # Writes every embedded project file into the current (project) directory.
 function write_payload_files() {
-    local f
+    local d f
+    for d in "${payload_directories[@]}"; do
+        mkdir -p "$d"
+    done
     for f in "${payload_files[@]}"; do
         mkdir -p "$(dirname "$f")"
         write_payload "$f" > "$f"
@@ -2620,38 +2715,15 @@ function main() {
 
     uv python install "$python_version"
 
-    uv init --python "$python_version"
-
-    echo "Project $project_name has been created and initialized with uv ($python_version)."
-    echo "Adding standard packages to pyproject.toml..."
-
-    # Get rid of some of the default files
-    rm -f "README.md" "main.py"
-
-    uv add numpy pandas matplotlib seaborn "gerrychain[geo]" maup ipykernel \
-        ipywidgets click gerrytools "binary-ensemble>=1.0" jsonlines joblib \
-        joblib-progress docker
-
-    # A formatter that I like
-    uv add --dev black
-
-    mkdir -p "data"
-    mkdir -p "JSON_dualgraphs"
-    mkdir -p "notebooks"
-    mkdir -p "pipeline_scripts"
-    mkdir -p "figures"
-    mkdir -p "stats"
-    mkdir -p "chain_outputs"
-    mkdir -p "chain_logs"
-    mkdir -p "dev_files"
-
-    echo "dev_files" >> .gitignore
-
-    # NOTE: Needed to make python reproducible
-    echo "export PYTHONHASHSEED=0" >> .env
-
     echo "Writing project files..."
     write_payload_files
+    printf '%s\n' "$python_version" > .python-version
+    sed "s/^requires-python = .*/requires-python = \">=$python_version\"/" \
+        pyproject.toml > pyproject.toml.tmp
+    mv pyproject.toml.tmp pyproject.toml
+
+    echo "Installing the project environment with uv ($python_version)..."
+    uv sync --python "$python_version"
 
     # Grab the MN example data. The zip is extracted with the project's Python so that
     # no unzip/bsdtar/tar is needed on the host.

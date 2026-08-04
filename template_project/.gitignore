@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+uv.lock
+dev_files/*
+chain_logs/*
+chain_outputs/*
+figures/*
+stats/*
+
+!.gitkeep
+!dev_files/.gitkeep
+!chain_logs/.gitkeep
+!chain_outputs/.gitkeep
+!figures/.gitkeep
+!stats/.gitkeep

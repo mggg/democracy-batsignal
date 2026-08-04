@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# THIS FILE IS GENERATED from installer_src/skeleton.ps1 and template/.
+# THIS FILE IS GENERATED from installer_src/skeleton.ps1 and template_project/.
 # Edit those sources and run 'python3 generate_installers.py' instead of
 # editing this script directly.
 # ---------------------------------------------------------------------------
@@ -321,10 +321,47 @@ function Confirm-Cargo
 # ========  EMBEDDED PROJECT FILES  ================
 # ==================================================
 
-# ====  GENERATED PAYLOADS (from template/) -- DO NOT EDIT BY HAND  ====
-# ====  regenerate with: python3 generate_installers.py             ====
+# ====  GENERATED PAYLOADS (from template_project/) -- DO NOT EDIT BY HAND  ====
+# ====  regenerate with: python3 generate_installers.py                     ====
+
+$PayloadDirectories = @(
+    'JSON_dualgraphs'
+    'chain_logs'
+    'chain_outputs'
+    'data'
+    'dev_files'
+    'figures'
+    'notebooks'
+    'pipeline_scripts'
+    'pipeline_scripts/metrics'
+    'stats'
+)
 
 $Payloads = [ordered]@{
+'.env' = @'
+PYTHONHASHSEED=0
+'@
+'.gitignore' = @'
+.venv/
+__pycache__/
+*.py[cod]
+uv.lock
+dev_files/*
+chain_logs/*
+chain_outputs/*
+figures/*
+stats/*
+
+!.gitkeep
+!dev_files/.gitkeep
+!chain_logs/.gitkeep
+!chain_outputs/.gitkeep
+!figures/.gitkeep
+!stats/.gitkeep
+'@
+'.python-version' = @'
+3.11
+'@
 'JSON_dualgraphs/gerrymandria.json' = @'
 {
     "directed": false,
@@ -1968,6 +2005,171 @@ $Payloads = [ordered]@{
     ]
 }
 '@
+'README.md' = @'
+# Redistricting Project
+
+This project contains example scripts for running redistricting chains, converting
+ensemble files, and calculating common metrics.
+
+Install the Python environment with:
+
+```bash
+uv sync
+```
+
+The Bash and PowerShell helper scripts are both kept here so the project can be used as
+the source for the platform-specific Democracy Batsignal installers.
+'@
+'batch_example_python_cli_parallel.ps1' = @'
+param(
+    [int]$MaxJobs = [Environment]::ProcessorCount,
+    [int[]]$RngSeeds = 1..50,
+    [int]$TotalSteps = 1000
+)
+
+$TOPDIR = (Resolve-Path $PSScriptRoot).Path
+$env:PYTHONHASHSEED = '0'
+
+$chainOut  = Join-Path $TOPDIR 'chain_outputs'
+$chainLogs = Join-Path $TOPDIR 'chain_logs'
+New-Item -ItemType Directory -Force -Path $chainOut, $chainLogs | Out-Null
+
+# Resolve uv once so jobs don't depend on profile PATH
+$uvExe = (Get-Command uv -ErrorAction Stop).Source
+
+$jobs = @()
+
+foreach ($seed in $RngSeeds)
+{
+
+    # throttle
+    while (($jobs | Where-Object State -eq 'Running').Count -ge $MaxJobs)
+    {
+        Start-Sleep -Milliseconds 200
+        $done = $jobs | Where-Object State -in 'Completed','Failed','Stopped'
+        if ($done)
+        {
+            Receive-Job -Job $done -Keep | Out-Null
+            $jobs = $jobs | Where-Object State -in 'Running','NotStarted'
+        }
+    }
+
+    $outFile = Join-Path $chainOut ("gerrymandria_chain_{0}_steps_seed{1}.jsonl" -f $TotalSteps, $seed)
+    $logFile = Join-Path $chainLogs ("log_parallel_rng_seed_{0}.log" -f $seed)
+
+    $job = Start-Job -Name "seed$seed" `
+        -ArgumentList $TOPDIR, $TotalSteps, $seed, $outFile, $logFile, $uvExe `
+        -ScriptBlock {
+        param($topdir, $nsteps, $seed, $outFile, $logFile, $uvExe)
+
+        Set-StrictMode -Version Latest
+        $ErrorActionPreference = 'Stop'
+        $env:PYTHONHASHSEED = '0'
+
+        # Cross-platform paths
+        $exampleCli = Join-Path $topdir (Join-Path 'pipeline_scripts' 'example_cli.py')
+        $graphPath  = Join-Path $topdir (Join-Path 'JSON_dualgraphs' 'gerrymandria.json')
+
+        # Build args as an array
+        $arguments = @(
+            'run', '--project', $topdir, $exampleCli,
+            '--graph-path', $graphPath,
+            '--output-path', $outFile,
+            '--starting-plan', 'district',
+            '--pop-col', 'TOTPOP',
+            '--rng-seed', $seed,
+            '--population-tolerance', '0.01',
+            '--total-steps', $nsteps,
+            '--writeas', 'jsonl'
+        )
+
+        try
+        {
+            & $uvExe @arguments *> $logFile
+        } catch
+        {
+            $_ | Out-String | Add-Content $logFile
+            throw
+        }
+    }
+
+    $jobs += $job
+}
+
+Write-Progress -Activity "Running jobs" -Status "Waiting for completion..."
+Wait-Job -Job $jobs
+Receive-Job -Job $jobs -Keep | Out-Null
+Write-Progress -Activity "Running jobs" -Completed
+'@
+'batch_example_python_cli_simple.ps1' = @'
+param(
+  [int[]]$RngSeeds = @(42,43,44),
+  [int]$TotalSteps = 1000,
+  [int[]]$RngSeeds2 = @(42),
+  [int]$TotalSteps2 = 100000
+)
+
+$TOPDIR = (Resolve-Path $PSScriptRoot).Path
+$env:PYTHONHASHSEED = '0'
+
+$chainOut  = Join-Path $TOPDIR 'chain_outputs'
+$chainLogs = Join-Path $TOPDIR 'chain_logs'
+New-Item -ItemType Directory -Force -Path $chainOut,$chainLogs | Out-Null
+
+foreach ($seed in $RngSeeds) {
+  $outFile = Join-Path $chainOut  "gerrymandria_chain_${TotalSteps}_steps_seed$seed.jsonl"
+  $logFile = Join-Path $chainLogs "log_simple_rng_seed_$seed.log"
+
+  & uv run (Join-Path "$TOPDIR" (Join-Path "pipeline_scripts" "example_cli.py")) `
+    --graph-path   (Join-Path "$TOPDIR" (Join-Path "JSON_dualgraphs" "gerrymandria.json")) `
+    --output-path  "$outFile" `
+    --starting-plan "district" `
+    --pop-col       "TOTPOP" `
+    --rng-seed      $seed `
+    --population-tolerance 0.01 `
+    --total-steps   $TotalSteps `
+    --writeas "jsonl" *> $logFile
+}
+
+foreach ($seed in $RngSeeds2) {
+  $outFile = Join-Path (Join-Path $TOPDIR "chain_outputs") ("MN_chain_{0}_steps_seed{1}.jsonl.ben" -f $TotalSteps2, $seed)
+
+  & uv run (Join-Path $TOPDIR (Join-Path "pipeline_scripts" "example_cli.py")) `
+    --graph-path   (Join-Path $TOPDIR (Join-Path "JSON_dualgraphs" "MN_precincts.geojson")) `
+    --output-path  $outFile `
+    --starting-plan "CONGDIST" `
+    --pop-col       "TOTPOP" `
+    --rng-seed      $seed `
+    --population-tolerance 0.05 `
+    --total-steps   $TotalSteps2 `
+    --writeas "ben"
+}
+'@
+'chain_outputs/ben_to_xben.ps1' = @'
+param([switch]$Recurse = $true)
+
+# This script converts every BEN file next to it to an XBEN file using the BEN cli tool.
+# Documentation at: https://crates.io/crates/binary-ensemble
+
+$files = Get-ChildItem -Path $PSScriptRoot -File -Filter *.ben -Recurse:$Recurse
+foreach ($f in $files) {
+  Write-Host "Processing $($f.FullName)"
+  # -c -1 lets the XZ encoder use every available core
+  & ben xencode $f.FullName -v -w -c -1
+}
+'@
+'chain_outputs/jsonl_to_ben.ps1' = @'
+param([switch]$Recurse = $true)
+
+# This script converts every JSONL file next to it to a BEN file using the BEN cli tool.
+# Documentation at: https://crates.io/crates/binary-ensemble
+
+$files = Get-ChildItem -Path $PSScriptRoot -File -Filter *.jsonl -Recurse:$Recurse
+foreach ($f in $files) {
+  Write-Host "Processing $($f.FullName)"
+  & ben encode $f.FullName -v -w
+}
+'@
 'pipeline_scripts/example_cli.py' = @'
 from gerrychain import Graph, Partition, MarkovChain
 from gerrychain.updaters import Tally
@@ -2491,156 +2693,6 @@ if __name__ == "__main__":
     with jl.open(OUTPUT_PATH, "w") as writer:
         writer.write_all(all_scores)
 '@
-'batch_example_python_cli_parallel.ps1' = @'
-param(
-    [int]$MaxJobs = [Environment]::ProcessorCount,
-    [int[]]$RngSeeds = 1..50,
-    [int]$TotalSteps = 1000
-)
-
-$TOPDIR = (Resolve-Path $PSScriptRoot).Path
-$env:PYTHONHASHSEED = '0'
-
-$chainOut  = Join-Path $TOPDIR 'chain_outputs'
-$chainLogs = Join-Path $TOPDIR 'chain_logs'
-New-Item -ItemType Directory -Force -Path $chainOut, $chainLogs | Out-Null
-
-# Resolve uv once so jobs don't depend on profile PATH
-$uvExe = (Get-Command uv -ErrorAction Stop).Source
-
-$jobs = @()
-
-foreach ($seed in $RngSeeds)
-{
-
-    # throttle
-    while (($jobs | Where-Object State -eq 'Running').Count -ge $MaxJobs)
-    {
-        Start-Sleep -Milliseconds 200
-        $done = $jobs | Where-Object State -in 'Completed','Failed','Stopped'
-        if ($done)
-        {
-            Receive-Job -Job $done -Keep | Out-Null
-            $jobs = $jobs | Where-Object State -in 'Running','NotStarted'
-        }
-    }
-
-    $outFile = Join-Path $chainOut ("gerrymandria_chain_{0}_steps_seed{1}.jsonl" -f $TotalSteps, $seed)
-    $logFile = Join-Path $chainLogs ("log_parallel_rng_seed_{0}.log" -f $seed)
-
-    $job = Start-Job -Name "seed$seed" `
-        -ArgumentList $TOPDIR, $TotalSteps, $seed, $outFile, $logFile, $uvExe `
-        -ScriptBlock {
-        param($topdir, $nsteps, $seed, $outFile, $logFile, $uvExe)
-
-        Set-StrictMode -Version Latest
-        $ErrorActionPreference = 'Stop'
-        $env:PYTHONHASHSEED = '0'
-
-        # Cross-platform paths
-        $exampleCli = Join-Path $topdir (Join-Path 'pipeline_scripts' 'example_cli.py')
-        $graphPath  = Join-Path $topdir (Join-Path 'JSON_dualgraphs' 'gerrymandria.json')
-
-        # Build args as an array
-        $arguments = @(
-            'run', '--project', $topdir, $exampleCli,
-            '--graph-path', $graphPath,
-            '--output-path', $outFile,
-            '--starting-plan', 'district',
-            '--pop-col', 'TOTPOP',
-            '--rng-seed', $seed,
-            '--population-tolerance', '0.01',
-            '--total-steps', $nsteps,
-            '--writeas', 'jsonl'
-        )
-
-        try
-        {
-            & $uvExe @arguments *> $logFile
-        } catch
-        {
-            $_ | Out-String | Add-Content $logFile
-            throw
-        }
-    }
-
-    $jobs += $job
-}
-
-Write-Progress -Activity "Running jobs" -Status "Waiting for completion..."
-Wait-Job -Job $jobs
-Receive-Job -Job $jobs -Keep | Out-Null
-Write-Progress -Activity "Running jobs" -Completed
-'@
-'batch_example_python_cli_simple.ps1' = @'
-param(
-  [int[]]$RngSeeds = @(42,43,44),
-  [int]$TotalSteps = 1000,
-  [int[]]$RngSeeds2 = @(42),
-  [int]$TotalSteps2 = 100000
-)
-
-$TOPDIR = (Resolve-Path $PSScriptRoot).Path
-$env:PYTHONHASHSEED = '0'
-
-$chainOut  = Join-Path $TOPDIR 'chain_outputs'
-$chainLogs = Join-Path $TOPDIR 'chain_logs'
-New-Item -ItemType Directory -Force -Path $chainOut,$chainLogs | Out-Null
-
-foreach ($seed in $RngSeeds) {
-  $outFile = Join-Path $chainOut  "gerrymandria_chain_${TotalSteps}_steps_seed$seed.jsonl"
-  $logFile = Join-Path $chainLogs "log_simple_rng_seed_$seed.log"
-
-  & uv run (Join-Path "$TOPDIR" (Join-Path "pipeline_scripts" "example_cli.py")) `
-    --graph-path   (Join-Path "$TOPDIR" (Join-Path "JSON_dualgraphs" "gerrymandria.json")) `
-    --output-path  "$outFile" `
-    --starting-plan "district" `
-    --pop-col       "TOTPOP" `
-    --rng-seed      $seed `
-    --population-tolerance 0.01 `
-    --total-steps   $TotalSteps `
-    --writeas "jsonl" *> $logFile
-}
-
-foreach ($seed in $RngSeeds2) {
-  $outFile = Join-Path (Join-Path $TOPDIR "chain_outputs") ("MN_chain_{0}_steps_seed{1}.jsonl.ben" -f $TotalSteps2, $seed)
-
-  & uv run (Join-Path $TOPDIR (Join-Path "pipeline_scripts" "example_cli.py")) `
-    --graph-path   (Join-Path $TOPDIR (Join-Path "JSON_dualgraphs" "MN_precincts.geojson")) `
-    --output-path  $outFile `
-    --starting-plan "CONGDIST" `
-    --pop-col       "TOTPOP" `
-    --rng-seed      $seed `
-    --population-tolerance 0.05 `
-    --total-steps   $TotalSteps2 `
-    --writeas "ben"
-}
-'@
-'chain_outputs/ben_to_xben.ps1' = @'
-param([switch]$Recurse = $true)
-
-# This script converts every BEN file next to it to an XBEN file using the BEN cli tool.
-# Documentation at: https://crates.io/crates/binary-ensemble
-
-$files = Get-ChildItem -Path $PSScriptRoot -File -Filter *.ben -Recurse:$Recurse
-foreach ($f in $files) {
-  Write-Host "Processing $($f.FullName)"
-  # -c -1 lets the XZ encoder use every available core
-  & ben xencode $f.FullName -v -w -c -1
-}
-'@
-'chain_outputs/jsonl_to_ben.ps1' = @'
-param([switch]$Recurse = $true)
-
-# This script converts every JSONL file next to it to a BEN file using the BEN cli tool.
-# Documentation at: https://crates.io/crates/binary-ensemble
-
-$files = Get-ChildItem -Path $PSScriptRoot -File -Filter *.jsonl -Recurse:$Recurse
-foreach ($f in $files) {
-  Write-Host "Processing $($f.FullName)"
-  & ben encode $f.FullName -v -w
-}
-'@
 'pipeline_scripts/rust_example_script.ps1' = @'
 param(
   [string]$PlanName = 'district',
@@ -2682,12 +2734,46 @@ $final_output_file = Join-Path $output_dir ("gerrymandria_chain_{0}_steps.jsonl.
   --n-threads 1 `
   --output-file $final_output_file
 '@
+'pyproject.toml' = @'
+[project]
+name = "redistricting-project"
+version = "0.1.0"
+description = "A ready-to-run redistricting analysis project"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "binary-ensemble>=1.0",
+    "click",
+    "docker",
+    "gerrychain[geo]",
+    "gerrytools",
+    "ipykernel",
+    "ipywidgets",
+    "joblib",
+    "joblib-progress",
+    "jsonlines",
+    "matplotlib",
+    "maup",
+    "numpy",
+    "pandas",
+    "seaborn",
+]
+
+[dependency-groups]
+dev = [
+    "black",
+]
+'@
 }
 
 # Writes every embedded project file into the current (project) directory.
 function Write-PayloadFiles
 {
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    foreach ($rel in $PayloadDirectories)
+    {
+        New-Item -ItemType Directory -Force -Path $rel | Out-Null
+    }
     foreach ($rel in $Payloads.Keys)
     {
         $destDir = Split-Path -Path $rel -Parent
@@ -2757,39 +2843,19 @@ function Main
     New-Item -ItemType Directory -Force -Path $projectName | Out-Null
     Push-Location $projectName
 
-    # Ensure uv Python and init
     & uv python install $pythonVersion
-    & uv init --python $pythonVersion
-
-    Write-OK "Project $projectName initialized with uv ($pythonVersion)."
-    Write-Info "Adding standard packages to pyproject.toml..."
-
-    # Remove default files uv created (if present)
-    Remove-Item -Force -ErrorAction SilentlyContinue "README.md","main.py"
-
-    # Add deps (include jsonlines used by example script)
-    & uv add numpy pandas matplotlib seaborn "gerrychain[geo]" maup ipykernel `
-        ipywidgets click gerrytools "binary-ensemble>=1.0" jsonlines joblib `
-        joblib-progress docker
-
-    # Formatter that I like
-    & uv add --dev black
-
-    # Create directories
-    $dirs = @(
-        "data","JSON_dualgraphs","notebooks","pipeline_scripts",
-        "figures","stats","chain_outputs","chain_logs","dev_files"
-    )
-    $dirs | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
-
-    # .gitignore
-    Add-Content -Path ".gitignore" -Value "dev_files"
-
-    # .env (uv --env-file expects KEY=VALUE lines; no 'export')
-    Add-Content -Path ".env" -Value "PYTHONHASHSEED=0"
 
     Write-Info "Writing project files..."
     Write-PayloadFiles
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText(".python-version", "$pythonVersion`n", $utf8NoBom)
+    $pyproject = [IO.File]::ReadAllText("pyproject.toml")
+    $pyproject = $pyproject -replace '(?m)^requires-python = .+$', `
+        "requires-python = `">=$pythonVersion`""
+    [IO.File]::WriteAllText("pyproject.toml", $pyproject, $utf8NoBom)
+
+    Write-Info "Installing the project environment with uv ($pythonVersion)..."
+    & uv sync --python $pythonVersion
 
     Write-Info "Downloading MN_precincts.geojson..."
     $destDir = "JSON_dualgraphs"

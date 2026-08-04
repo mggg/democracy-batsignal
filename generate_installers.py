@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Regenerate template_maker.sh and template_maker.ps1 from template/ and installer_src/.
+"""Regenerate the installers from template_project/ and installer_src/.
 
 The two installers are single-file, fully self-contained scripts that users can carry
-around on their own: every project file under template/ is embedded in them as a
-payload. Edit the real files under template/ (or the installer skeletons under
-installer_src/) and rerun this script; never edit the generated installers directly.
+around on their own. Edit the runnable project under template_project/ (or the
+installer skeletons under installer_src/) and rerun this script; never edit the
+generated installers directly.
 
 Usage:
     python3 generate_installers.py          # rewrite both installers
@@ -15,32 +15,53 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-TEMPLATE = ROOT / "template"
+TEMPLATE = ROOT / "template_project"
 SRC = ROOT / "installer_src"
 MARKER = "# {{GENERATED_PAYLOADS}}"
 HEREDOC_EOF = "TEMPLATE_PAYLOAD_EOF"
+PLATFORM_SUFFIX = {"bash": ".sh", "powershell": ".ps1"}
+SCRIPT_SUFFIXES = set(PLATFORM_SUFFIX.values())
+IGNORED_DIRECTORIES = {".venv", "__pycache__", ".pytest_cache", ".ruff_cache"}
+IGNORED_FILES = {"uv.lock"}
 
 BANNER = [
-    "====  GENERATED PAYLOADS (from template/) -- DO NOT EDIT BY HAND  ====",
-    "====  regenerate with: python3 generate_installers.py             ====",
+    "====  GENERATED PAYLOADS (from template_project/) -- DO NOT EDIT BY HAND  ====",
+    "====  regenerate with: python3 generate_installers.py                     ====",
 ]
 
 
-def payloads(platform):
-    """(dest_rel_path, content) pairs from template/common plus template/<platform>."""
-    out = []
-    for tree in ("common", platform):
-        base = TEMPLATE / tree
-        for p in sorted(base.rglob("*")):
-            if p.is_file():
-                out.append((p.relative_to(base).as_posix(), p.read_text()))
-    return out
+def project_paths(platform):
+    """Return the template directories and UTF-8 files for one platform."""
+    suffix = PLATFORM_SUFFIX[platform]
+    directories = []
+    files = []
+
+    for path in sorted(TEMPLATE.rglob("*")):
+        relative = path.relative_to(TEMPLATE)
+        if any(part in IGNORED_DIRECTORIES for part in relative.parts):
+            continue
+        if path.is_dir():
+            directories.append(relative.as_posix())
+            continue
+        if path.name == ".gitkeep" or path.name in IGNORED_FILES:
+            continue
+        if path.suffix in SCRIPT_SUFFIXES and path.suffix != suffix:
+            continue
+        try:
+            content = path.read_text()
+        except UnicodeDecodeError as error:
+            raise SystemExit(f"{relative}: template files must be UTF-8 text") from error
+        files.append((relative.as_posix(), content))
+
+    return directories, files
 
 
 def bash_payload_block():
-    items = payloads("bash")
+    directories, items = project_paths("bash")
     lines = [f"# {b}" for b in BANNER]
-    lines += ["", "payload_files=("]
+    lines += ["", "payload_directories=("]
+    lines += [f'    "{rel}"' for rel in directories]
+    lines += [")", "", "payload_files=("]
     lines += [f'    "{rel}"' for rel, _ in items]
     lines += [")", "", "function write_payload() {", '    case "$1" in']
     for rel, content in items:
@@ -56,9 +77,11 @@ def bash_payload_block():
 
 
 def ps1_payload_block():
-    items = payloads("powershell")
+    directories, items = project_paths("powershell")
     lines = [f"# {b}" for b in BANNER]
-    lines += ["", "$Payloads = [ordered]@{"]
+    lines += ["", "$PayloadDirectories = @("]
+    lines += [f"    '{rel}'" for rel in directories]
+    lines += [")", "", "$Payloads = [ordered]@{"]
     for rel, content in items:
         for ln in content.splitlines():
             if ln.startswith("'@"):

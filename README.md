@@ -76,8 +76,10 @@ subsampling, and the batch scripts export `PYTHONHASHSEED=0` so GerryChain runs 
 `template_maker.sh` and `template_maker.ps1` are **generated files**; do not edit them directly.
 The sources are:
 
-- `template/` — the real project files (`common/` shared Python and data, `bash/` and
-  `powershell/` platform wrappers), editable and testable as ordinary scripts.
+- `template_project/` — a runnable uv project and the source of every generated project.
+  Edit its `pyproject.toml`, scripts, data, or directory layout as you would any other
+  project. Keep both `.sh` and `.ps1` helper variants beside each other; the generator
+  includes only the variant for each installer.
 - `installer_src/skeleton.sh` and `installer_src/skeleton.ps1` — the installer logic, with a
   `# {{GENERATED_PAYLOADS}}` marker where the template files get embedded.
 
@@ -88,4 +90,8 @@ python3 generate_installers.py          # rewrite template_maker.sh / template_m
 python3 generate_installers.py --check  # verify they are up to date (useful in CI)
 ```
 
-The `my_project/` folder is a checked-in example of what the generator produces.
+The generator embeds UTF-8 project files, preserves directories represented by `.gitkeep`,
+and skips `uv.lock` plus local environment/cache directories such as `.venv` and
+`__pycache__`. Each installer resolves dependencies after applying the user's Python choice.
+
+The `my_project/` folder is a checked-in sample output; `template_project/` is the source of truth.

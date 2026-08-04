@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# THIS FILE IS GENERATED from installer_src/skeleton.ps1 and template/.
+# THIS FILE IS GENERATED from installer_src/skeleton.ps1 and template_project/.
 # Edit those sources and run 'python3 generate_installers.py' instead of
 # editing this script directly.
 # ---------------------------------------------------------------------------
@@ -327,6 +327,10 @@ function Confirm-Cargo
 function Write-PayloadFiles
 {
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    foreach ($rel in $PayloadDirectories)
+    {
+        New-Item -ItemType Directory -Force -Path $rel | Out-Null
+    }
     foreach ($rel in $Payloads.Keys)
     {
         $destDir = Split-Path -Path $rel -Parent
@@ -396,39 +400,19 @@ function Main
     New-Item -ItemType Directory -Force -Path $projectName | Out-Null
     Push-Location $projectName
 
-    # Ensure uv Python and init
     & uv python install $pythonVersion
-    & uv init --python $pythonVersion
-
-    Write-OK "Project $projectName initialized with uv ($pythonVersion)."
-    Write-Info "Adding standard packages to pyproject.toml..."
-
-    # Remove default files uv created (if present)
-    Remove-Item -Force -ErrorAction SilentlyContinue "README.md","main.py"
-
-    # Add deps (include jsonlines used by example script)
-    & uv add numpy pandas matplotlib seaborn "gerrychain[geo]" maup ipykernel `
-        ipywidgets click gerrytools "binary-ensemble>=1.0" jsonlines joblib `
-        joblib-progress docker
-
-    # Formatter that I like
-    & uv add --dev black
-
-    # Create directories
-    $dirs = @(
-        "data","JSON_dualgraphs","notebooks","pipeline_scripts",
-        "figures","stats","chain_outputs","chain_logs","dev_files"
-    )
-    $dirs | ForEach-Object { New-Item -ItemType Directory -Force -Path $_ | Out-Null }
-
-    # .gitignore
-    Add-Content -Path ".gitignore" -Value "dev_files"
-
-    # .env (uv --env-file expects KEY=VALUE lines; no 'export')
-    Add-Content -Path ".env" -Value "PYTHONHASHSEED=0"
 
     Write-Info "Writing project files..."
     Write-PayloadFiles
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText(".python-version", "$pythonVersion`n", $utf8NoBom)
+    $pyproject = [IO.File]::ReadAllText("pyproject.toml")
+    $pyproject = $pyproject -replace '(?m)^requires-python = .+$', `
+        "requires-python = `">=$pythonVersion`""
+    [IO.File]::WriteAllText("pyproject.toml", $pyproject, $utf8NoBom)
+
+    Write-Info "Installing the project environment with uv ($pythonVersion)..."
+    & uv sync --python $pythonVersion
 
     Write-Info "Downloading MN_precincts.geojson..."
     $destDir = "JSON_dualgraphs"

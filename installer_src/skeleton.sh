@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ---------------------------------------------------------------------------
-# THIS FILE IS GENERATED from installer_src/skeleton.sh and template/.
+# THIS FILE IS GENERATED from installer_src/skeleton.sh and template_project/.
 # Edit those sources and run 'python3 generate_installers.py' instead of
 # editing this script directly.
 # ---------------------------------------------------------------------------
@@ -115,7 +115,10 @@ function check_cargo_installed() {
 
 # Writes every embedded project file into the current (project) directory.
 function write_payload_files() {
-    local f
+    local d f
+    for d in "${payload_directories[@]}"; do
+        mkdir -p "$d"
+    done
     for f in "${payload_files[@]}"; do
         mkdir -p "$(dirname "$f")"
         write_payload "$f" > "$f"
@@ -194,38 +197,15 @@ function main() {
 
     uv python install "$python_version"
 
-    uv init --python "$python_version"
-
-    echo "Project $project_name has been created and initialized with uv ($python_version)."
-    echo "Adding standard packages to pyproject.toml..."
-
-    # Get rid of some of the default files
-    rm -f "README.md" "main.py"
-
-    uv add numpy pandas matplotlib seaborn "gerrychain[geo]" maup ipykernel \
-        ipywidgets click gerrytools "binary-ensemble>=1.0" jsonlines joblib \
-        joblib-progress docker
-
-    # A formatter that I like
-    uv add --dev black
-
-    mkdir -p "data"
-    mkdir -p "JSON_dualgraphs"
-    mkdir -p "notebooks"
-    mkdir -p "pipeline_scripts"
-    mkdir -p "figures"
-    mkdir -p "stats"
-    mkdir -p "chain_outputs"
-    mkdir -p "chain_logs"
-    mkdir -p "dev_files"
-
-    echo "dev_files" >> .gitignore
-
-    # NOTE: Needed to make python reproducible
-    echo "export PYTHONHASHSEED=0" >> .env
-
     echo "Writing project files..."
     write_payload_files
+    printf '%s\n' "$python_version" > .python-version
+    sed "s/^requires-python = .*/requires-python = \">=$python_version\"/" \
+        pyproject.toml > pyproject.toml.tmp
+    mv pyproject.toml.tmp pyproject.toml
+
+    echo "Installing the project environment with uv ($python_version)..."
+    uv sync --python "$python_version"
 
     # Grab the MN example data. The zip is extracted with the project's Python so that
     # no unzip/bsdtar/tar is needed on the host.

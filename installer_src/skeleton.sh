@@ -101,7 +101,7 @@ function check_cargo_installed() {
             fi
             echo "Rust and Cargo have been installed."
         else
-            echo "Cargo is required to use FRCW or BEN. Exiting."
+            echo "Cargo is required to use RustReCom. Exiting."
             exit 1
         fi
     fi
@@ -153,38 +153,19 @@ function main() {
         echo "No project name provided. Using default name: $project_name"
     fi
 
-    read -p "Would you like to use FRCW in this project? (y/[n]): " use_frcw
+    read -p "Would you like to use RustReCom in this project? (y/[n]): " use_frcw
     if [[ "$use_frcw" == "y" || "$use_frcw" == "Y" ]]; then
         check_cargo_installed
-        echo "Installing FRCW (rustrecom, branch 0.1.4)..."
-        cargo install --git "https://github.com/mggg/rustrecom" --branch "0.1.4" --force
-        echo "FRCW has been installed."
-
-        echo "Installing binary-ensemble"
-        cargo install binary-ensemble --force
-        echo "binary-ensemble has been installed."
-
-        echo "Installing ben-process (metrics engine)"
-        cargo install --git "https://github.com/peterrrock2/ben-process" --force
-        echo "ben-process has been installed."
-    else
-        read -p "Would you like to use BEN in this project? (y/[n]): " use_ben
-        if [[ "$use_ben" == "y" || "$use_ben" == "Y" ]]; then
-            check_cargo_installed
-            echo "Installing binary-ensemble"
-            cargo install binary-ensemble --force
-            echo "binary-ensemble has been installed."
-
-            echo "Installing ben-process (metrics engine)"
-            cargo install --git "https://github.com/peterrrock2/ben-process" --force
-            echo "ben-process has been installed."
-        fi
+        echo "Installing RustReCom (rustrecom, version 0.2.0)..."
+        cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --force
+        echo "RustReCom has been installed."
     fi
 
-    read -p "What python version would you like to use (3.11, 3.12, 3.13)? (default: 3.11): " python_version
+    prompt="What python version would you like to use (3.11, 3.12, 3.13, 3.14)? (default: 3.11): "
+    read -p "$prompt" python_version
     python_version="${python_version:-3.11}"  # if empty/unset, use 3.11
     case "$python_version" in
-        3.11 | 3.12 | 3.13) ;;               # match = valid -> do nothing, then end this block
+        3.11 | 3.12 | 3.13 | 3.14) ;;          # match = valid -> do nothing, then end this block
         *)                                     # anything else -> default
             echo "Invalid python version. Using default 3.11."
             python_version="3.11"
@@ -207,17 +188,18 @@ function main() {
     echo "Installing the project environment with uv ($python_version)..."
     uv sync --python "$python_version"
 
-    # Grab the MN example data. The zip is extracted with the project's Python so that
+    # Grab the PA example data. The zip is extracted with the project's Python so that
     # no unzip/bsdtar/tar is needed on the host.
-    echo "Downloading MN example data..."
-    mn_zip="$(mktemp)"
-    if ! download_with_retries "https://github.com/mggg/GerryChain/raw/main/docs/_static/MN.zip" "$mn_zip"; then
-        echo "Failed to download MN example data. Exiting."
-        rm -f "$mn_zip"
+    echo "Downloading PA example data..."
+    pa_zip="$(mktemp)"
+    pa_url="https://github.com/mggg-states/PA-shapefiles/raw/refs/heads/master/PA_2020_vtds.zip"
+    if ! download_with_retries "$pa_url" "$pa_zip"; then
+        echo "Failed to download PA example data. Exiting."
+        rm -f "$pa_zip"
         exit 1
     fi
-    uv run python -m zipfile -e "$mn_zip" "JSON_dualgraphs"
-    rm -f "$mn_zip"
+    uv run python -m zipfile -e "$pa_zip" "data"
+    rm -f "$pa_zip"
 
     echo "Your project is ready! You may need to restart your shell for uv to work properly."
 }

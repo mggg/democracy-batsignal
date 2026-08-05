@@ -2,9 +2,9 @@
 
 Sets up a ready-to-run redistricting-analysis project in one step: a [uv](https://docs.astral.sh/uv/)-managed
 Python environment with [GerryChain](https://github.com/mggg/GerryChain) and friends, the Rust chain runner
-[FRCW](https://github.com/mggg/rustrecom), the [BEN](https://crates.io/crates/binary-ensemble) ensemble-compression
-tools, and example scripts for every stage of the pipeline: running chains, compressing ensembles, and
-computing scores.
+[RustReCom](https://github.com/mggg/rustrecom), the
+[BEN](https://crates.io/crates/binary-ensemble) ensemble-compression tools, and example scripts for every
+stage of the pipeline: running chains, compressing ensembles, and computing scores.
 
 ## Quickstart
 
@@ -36,12 +36,12 @@ my_project/
 ├── pyproject.toml            # uv-managed environment (gerrychain, binary-ensemble, ...)
 ├── JSON_dualgraphs/          # dual graphs: gerrymandria.json and MN_precincts.geojson examples
 ├── pipeline_scripts/
-│   ├── example_cli.py        # click CLI that runs a GerryChain ReCom chain -> JSONL or BEN
-│   ├── rust_example_script.* # the same idea, but running a chain through FRCW
-│   └── metrics/              # per-metric scoring scripts that read a BEN ensemble
+│   ├── example_cli.py        # click CLI that records a GerryChain ReCom chain as BENDL
+│   ├── rust_example_script.* # the same idea, but running a chain through RustReCom
+│   └── metrics/              # per-metric scoring scripts that read a BENDL recording
 ├── batch_example_python_cli_simple.*    # run a few seeded chains one after another
 ├── batch_example_python_cli_parallel.*  # run many seeded chains with a concurrency cap
-├── chain_outputs/            # chain results land here (plus jsonl_to_ben / ben_to_xben helpers)
+├── chain_outputs/            # self-contained BENDL chain recordings land here
 ├── chain_logs/               # per-run logs from the batch scripts
 ├── stats/                    # metric outputs
 ├── figures/, notebooks/, data/, dev_files/
@@ -55,14 +55,16 @@ identical on every platform.
 
 1. **Run a chain.** Either the Python route (`batch_example_python_cli_simple.*` drives
    `pipeline_scripts/example_cli.py`) or the much faster Rust route
-   (`pipeline_scripts/rust_example_script.*` drives `frcw`). Both write either plain JSONL or
-   compressed `.ben` ensembles into `chain_outputs/`.
+   (`pipeline_scripts/rust_example_script.*` drives `rustrecom chain`). Both write `.bendl`
+   recordings into `chain_outputs/`; each recording bundles the assignments with its graph and
+   run metadata.
 
-2. **Compress / convert ensembles.** `chain_outputs/jsonl_to_ben.*` converts any JSONL ensembles
-   sitting in `chain_outputs/` to BEN, and `ben_to_xben.*` recompresses BEN to the much smaller XBEN
-   for archiving. See `ben --help` for the full toolset (decode, lookup, relabel, canonicalize, ...).
+   Ready-to-use tilted-run objectives are in `pipeline_scripts/rustrecom_objectives/`.
 
-3. **Score the ensemble.** The scripts in `pipeline_scripts/metrics/` read a `.ben` file and write
+2. **Inspect or convert ensembles.** BENDL is the default working format. See `ben --help` for
+   tools to inspect, decode, look up, relabel, or convert recordings.
+
+3. **Score the ensemble.** The scripts in `pipeline_scripts/metrics/` read a `.bendl` file and write
    per-plan scores to `stats/` (Polsby-Popper, Reock, county splits and cut edges, partisan bias,
    Dem seat counts). They are plain Python driven by constants at the top of each file; point them at
    your chain file and graph and run them with `uv run`. For large ensembles the `ben-process` CLI

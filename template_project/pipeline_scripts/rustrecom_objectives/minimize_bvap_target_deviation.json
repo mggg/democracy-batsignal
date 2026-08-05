@@ -1,0 +1,6 @@
+{
+    "objective": "by_district_abs_deviation",
+    "target_values": [0.5, 0.5],
+    "pov_counts_col": "bvap_20",
+    "total_counts_col": "total_vap_20"
+}

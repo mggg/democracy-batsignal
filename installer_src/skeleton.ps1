@@ -360,14 +360,14 @@ function Main
         Write-Warn "No project name provided. Using default: $projectName"
     }
 
-    $useFrcw = Read-Host "Would you like to use FRCW in this project? (y/[n])"
+    $useFrcw = Read-Host "Would you like to use RustReCom in this project? (y/[n])"
     if ($useFrcw -match '^(y|Y)$')
     {
         Confirm-BuildTools
         Confirm-Cargo
-        Write-Info "Installing FRCW (rustrecom, branch 0.1.4)..."
-        & cargo install --git "https://github.com/mggg/rustrecom" --branch "0.1.4" --force
-        Write-OK "FRCW installed."
+        Write-Info "Installing RustReCom (rustrecom, version 0.2.0)..."
+        & cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --force
+        Write-OK "RustReCom installed."
         Write-Info "Installing binary-ensemble..."
         & cargo install binary-ensemble --force
         Write-OK "binary-ensemble installed."

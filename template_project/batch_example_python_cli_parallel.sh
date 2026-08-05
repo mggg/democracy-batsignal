@@ -84,13 +84,12 @@ function start_job() {
     local n_steps=$2 # number of steps is the second positional argument
     uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
         --graph-path "${TOPDIR}/JSON_dualgraphs/gerrymandria.json" \
-        --output-path "${TOPDIR}/chain_outputs/gerrymandria_chain_${n_steps}_steps_seed${seed}.jsonl" \
+        --output-path "${TOPDIR}/chain_outputs/gerrymandria_chain_${n_steps}_steps_seed${seed}.bendl" \
         --starting-plan "district" \
         --pop-col "TOTPOP" \
         --rng-seed "$seed" \
         --population-tolerance 0.01 \
-        --total-steps "$n_steps" \
-        --writeas "jsonl" > "${TOPDIR}/chain_logs/log_parallel_rng_seed_$seed.log" 2>&1 &
+        --total-steps "$n_steps" > "${TOPDIR}/chain_logs/log_parallel_rng_seed_$seed.log" 2>&1 &
     pids+=("$!")
 }
 

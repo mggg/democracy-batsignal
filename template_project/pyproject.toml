@@ -7,22 +7,21 @@ requires-python = ">=3.11"
 dependencies = [
     "binary-ensemble>=1.0",
     "click",
-    "docker",
-    "gerrychain[geo]",
-    "gerrytools",
+    "gerrychain>=1.0.0",
+    "gerrytools>=2.0.1",
     "ipykernel",
     "ipywidgets",
     "joblib",
     "joblib-progress",
-    "jsonlines",
     "matplotlib",
     "maup",
     "numpy",
     "pandas",
-    "seaborn",
 ]
 
 [dependency-groups]
 dev = [
-    "black",
+    "ruff",
+    "ty",
+    "pyright"
 ]

@@ -31,7 +31,7 @@ foreach ($seed in $RngSeeds)
         }
     }
 
-    $outFile = Join-Path $chainOut ("gerrymandria_chain_{0}_steps_seed{1}.jsonl" -f $TotalSteps, $seed)
+    $outFile = Join-Path $chainOut ("gerrymandria_chain_{0}_steps_seed{1}.bendl" -f $TotalSteps, $seed)
     $logFile = Join-Path $chainLogs ("log_parallel_rng_seed_{0}.log" -f $seed)
 
     $job = Start-Job -Name "seed$seed" `
@@ -56,8 +56,7 @@ foreach ($seed in $RngSeeds)
             '--pop-col', 'TOTPOP',
             '--rng-seed', $seed,
             '--population-tolerance', '0.01',
-            '--total-steps', $nsteps,
-            '--writeas', 'jsonl'
+            '--total-steps', $nsteps
         )
 
         try

@@ -6,7 +6,8 @@ dev_files/*
 chain_logs/*
 chain_outputs/*
 figures/*
-stats/*
+stats
+data/*
 
 !.gitkeep
 !dev_files/.gitkeep

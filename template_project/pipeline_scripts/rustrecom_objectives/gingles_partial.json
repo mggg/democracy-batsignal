@@ -1,0 +1,6 @@
+{
+    "objective": "gingles_partial",
+    "threshold": 0.5,
+    "min_pop": "bvap_20",
+    "total_pop": "total_vap_20"
+}

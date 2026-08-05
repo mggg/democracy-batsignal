@@ -1,0 +1,15 @@
+{
+    "objective": "election_wins",
+    "elections": [
+        {
+            "votes_a": "pres_20_dem",
+            "votes_b": "pres_20_rep"
+        },
+        {
+            "votes_a": "sen_18_dem",
+            "votes_b": "sen_18_rep"
+        }
+    ],
+    "target": "a",
+    "aggregation": "mean"
+}

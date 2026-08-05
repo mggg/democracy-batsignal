@@ -23,6 +23,7 @@ PLATFORM_SUFFIX = {"bash": ".sh", "powershell": ".ps1"}
 SCRIPT_SUFFIXES = set(PLATFORM_SUFFIX.values())
 IGNORED_DIRECTORIES = {".venv", "__pycache__", ".pytest_cache", ".ruff_cache"}
 IGNORED_FILES = {"uv.lock"}
+OUTPUT_DIRECTORIES = {"chain_logs", "chain_outputs", "data", "dev_files", "figures", "stats"}
 
 BANNER = [
     "====  GENERATED PAYLOADS (from template_project/) -- DO NOT EDIT BY HAND  ====",
@@ -39,6 +40,12 @@ def project_paths(platform):
     for path in sorted(TEMPLATE.rglob("*")):
         relative = path.relative_to(TEMPLATE)
         if any(part in IGNORED_DIRECTORIES for part in relative.parts):
+            continue
+        if (
+            relative.parts[0] in OUTPUT_DIRECTORIES
+            and len(relative.parts) > 1
+            and path.name not in {".gitignore", ".gitkeep"}
+        ):
             continue
         if path.is_dir():
             directories.append(relative.as_posix())

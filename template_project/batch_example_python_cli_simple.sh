@@ -15,13 +15,12 @@ n_steps=1000
 for seed in "${rng_seeds[@]}"; do
     uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
         --graph-path "${TOPDIR}/JSON_dualgraphs/gerrymandria.json" \
-        --output-path "${TOPDIR}/chain_outputs/gerrymandria_chain_${n_steps}_steps_seed${seed}.jsonl" \
+        --output-path "${TOPDIR}/chain_outputs/gerrymandria_chain_${n_steps}_steps_seed${seed}.bendl" \
         --starting-plan "district" \
         --pop-col "TOTPOP" \
         --rng-seed $seed \
         --population-tolerance 0.01 \
-        --total-steps $n_steps \
-        --writeas "jsonl" > "${TOPDIR}/chain_logs/log_simple_rng_seed_$seed.log" 2>&1
+        --total-steps $n_steps > "${TOPDIR}/chain_logs/log_simple_rng_seed_$seed.log" 2>&1
 done
 
 
@@ -31,11 +30,10 @@ n_steps=100000
 for seed in "${rng_seeds[@]}"; do
     uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
         --graph-path "${TOPDIR}/JSON_dualgraphs/MN_precincts.geojson" \
-        --output-path "${TOPDIR}/chain_outputs/MN_chain_${n_steps}_steps_seed${seed}.jsonl.ben" \
+        --output-path "${TOPDIR}/chain_outputs/MN_chain_${n_steps}_steps_seed${seed}.bendl" \
         --starting-plan "CONGDIST" \
         --pop-col "TOTPOP" \
         --rng-seed $seed \
         --population-tolerance 0.05 \
-        --total-steps $n_steps \
-        --writeas "ben"
+        --total-steps $n_steps
 done

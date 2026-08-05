@@ -1,0 +1,7 @@
+{
+    "objective": "polsby_popper",
+    "area_col": "area",
+    "boundary_perim_col": "boundary_perim",
+    "shared_perim_col": "shared_perim",
+    "aggregation": "mean"
+}

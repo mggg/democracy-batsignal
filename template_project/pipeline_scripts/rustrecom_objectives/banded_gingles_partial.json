@@ -1,0 +1,7 @@
+{
+    "objective": "banded_gingles_partial",
+    "lower_threshold": 0.5,
+    "upper_threshold": 0.6,
+    "min_pop": "bvap_20",
+    "total_pop": "total_vap_20"
+}

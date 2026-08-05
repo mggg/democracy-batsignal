@@ -1,39 +1,36 @@
 param(
-  [string]$PlanName = 'district',
-  [int]$n_steps = 1000,
-  [int]$seed = 42,
-  [double]$tol = 0.01,
-  [string]$pop_col = 'TOTPOP'
+  [string]$AssignmentColumn = 'seed_plan',
+  [int]$NSteps = 1000,
+  [int]$RngSeed = 42,
+  [double]$Tolerance = 0.01,
+  [string]$PopulationColumn = 'total_pop_20'
 )
 
 # Project root is the parent of this script's folder
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
-$json_dir   = Join-Path $ProjectRoot 'JSON_dualgraphs'
-$output_dir = Join-Path $ProjectRoot 'chain_outputs'
+$jsonDir = Join-Path $ProjectRoot 'JSON_dualgraphs'
+$outputDir = Join-Path $ProjectRoot 'chain_outputs'
 
-# Ensure output dir exists
-New-Item -ItemType Directory -Force -Path $output_dir | Out-Null
+$graphJson = Join-Path $jsonDir 'pa_dualgraph.json'
 
-# Build JSON path (don't Resolve-Path until we know it exists)
-$json_file = Join-Path $json_dir 'gerrymandria.json'
-
-if (-not (Test-Path $json_file)) {
-  Write-Error "Could not find graph JSON at: $json_file`nDid the bootstrap step download it?"
+if (-not (Test-Path $graphJson)) {
+  Write-Error "Could not find graph JSON at: $graphJson"
   exit 1
 }
 
-$final_output_file = Join-Path $output_dir ("gerrymandria_chain_{0}_steps.jsonl.ben" -f $n_steps)
+New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+$outputName = "PA__STEPS_${NSteps}__RNGSEED_${RngSeed}__TOL_${Tolerance}.bendl"
+$outputFile = Join-Path $outputDir $outputName
 
-& frcw `
-  --assignment-col $PlanName `
-  --graph-json $json_file `
-  --n-steps $n_steps `
-  --pop-col $pop_col `
-  --rng-seed $seed `
-  --tol $tol `
-  --variant district-pairs-rmst `
-  --writer ben `
-  --batch-size 1 `
-  --n-threads 1 `
-  --output-file $final_output_file
+& rustrecom chain `
+  --assignment-col $AssignmentColumn `
+  --graph-json $graphJson `
+  --n-steps $NSteps `
+  --pop-col $PopulationColumn `
+  --rng-seed $RngSeed `
+  --tol $Tolerance `
+  --variant district-pairs-mst `
+  --writer bendl `
+  --output-file $outputFile `
+  --overwrite-output

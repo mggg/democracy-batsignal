@@ -1,106 +1,118 @@
-from gerrychain import Graph, Partition, MarkovChain
-from gerrychain.updaters import Tally
-from gerrychain.accept import always_accept
-from gerrychain.proposals.tree_proposals import recom
-from functools import partial
-import random
-import jsonlines as jl
-import click
-import numpy as np
-from pathlib import Path
-from binary_ensemble.stream import BenEncoder
+"""Run and record a GerryChain ReCom chain."""
+
 import sys
+from functools import partial
+from pathlib import Path
+
+import click
+from gerrychain import Graph, Partition
+from gerrychain.proposals import recom
+from gerrychain.updaters import Tally
+from gerrytools.ben import RecordedChain
+
+
+def load_graph(graph_path: Path) -> Graph:
+    """Load a GerryChain graph from JSON or a GIS file.
+
+    Args:
+        graph_path: Path to the graph file.
+
+    Returns:
+        The loaded graph.
+
+    Raises:
+        click.ClickException: If GerryChain cannot load the graph.
+    """
+    try:
+        if graph_path.suffix.lower() == ".json":
+            return Graph.from_json(str(graph_path))
+        return Graph.from_file(str(graph_path))
+    except Exception as error:
+        raise click.ClickException(f"Failed to load graph from {graph_path}: {error}") from error
 
 
 @click.command()
-@click.option("--graph-path", type=click.Path(exists=True, dir_okay=False))
-@click.option("--output-path", type=click.Path(writable=True, dir_okay=False))
-@click.option("--starting-plan", type=str)
-@click.option("--pop-col", type=str)
-@click.option("--rng-seed", type=int)
-@click.option("--population-tolerance", type=float, default=0.01)
-@click.option("--total-steps", type=int, default=10_000)
-@click.option("--writeas", type=click.Choice(["jsonl", "ben"]), default="ben")
+@click.option(
+    "--graph-path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="GerryChain JSON graph or GIS file.",
+)
+@click.option(
+    "--output-path",
+    type=click.Path(writable=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Destination .bendl file. An existing file is replaced after a successful run.",
+)
+@click.option("--starting-plan", type=str, required=True, help="Starting-plan node attribute.")
+@click.option("--pop-col", type=str, required=True, help="Population node attribute.")
+@click.option("--rng-seed", type=int, required=True, help="Random seed for the chain.")
+@click.option(
+    "--population-tolerance",
+    type=click.FloatRange(min=0, max=1),
+    default=0.01,
+    show_default=True,
+    help="Allowed fractional population deviation in each ReCom proposal.",
+)
+@click.option(
+    "--total-steps",
+    type=click.IntRange(min=1),
+    default=10_000,
+    show_default=True,
+    help="Number of plans to record, including the initial plan.",
+)
 def main(
-    graph_path,
-    output_path,
-    starting_plan,
-    pop_col,
-    rng_seed,
-    population_tolerance,
-    total_steps,
-    writeas,
-):
-    random.seed(rng_seed)
-    np.random.seed(rng_seed)
+    graph_path: Path,
+    output_path: Path,
+    starting_plan: str,
+    pop_col: str,
+    rng_seed: int,
+    population_tolerance: float,
+    total_steps: int,
+) -> None:
+    """Run a ReCom chain and record it as a BENDL."""
 
-    try:
-        if graph_path.endswith(".json"):
-            graph = Graph.from_json(graph_path)
-        else:
-            graph = Graph.from_file(graph_path)
-    except Exception as e:
-        raise ValueError(f"Failed to load graph from {graph_path}: {e}")
+    graph = load_graph(graph_path)
 
-    initial_partition = Partition(
+    chain = RecordedChain(
         graph,
+        output_path=output_path,
+        total_steps=total_steps,
+        rng=rng_seed,
+        metadata={
+            "starting_plan": starting_plan,
+            "population_column": pop_col,
+            "population_tolerance": population_tolerance,
+            "rng_seed": rng_seed,
+        },
+    )
+
+    chain.initial_partition = Partition(
+        chain.graph,
         assignment=starting_plan,
         updaters={"population": Tally(pop_col, alias="population")},
     )
 
-    ideal_pop = sum(initial_partition["population"].values()) / len(initial_partition)
-
-    proposal = partial(
+    ideal_population = sum(chain.initial_partition["population"].values()) / len(
+        chain.initial_partition
+    )
+    chain.proposal_fn = partial(
         recom,
         pop_col=pop_col,
-        pop_target=ideal_pop,
+        pop_target=ideal_population,
         epsilon=population_tolerance,
-        node_repeats=1,
     )
 
-    chain = MarkovChain(
-        proposal=proposal,
-        constraints=[],
-        initial_state=initial_partition,
-        total_steps=total_steps,
-        accept=always_accept,
-    )
-
-    graph_node_order = list(graph.nodes)
-
-    # This will print to the standard error stream so that logging does not interfere with the
-    # standard output.
-    print(
-        f"Writing output to '{Path(output_path).name}' in '{writeas.upper()}' format.",
+    with click.progressbar(
+        chain.allow_overwrite(),
+        length=total_steps,
+        label=f"Recording {output_path.name}",
         file=sys.stderr,
-        flush=True,
-    )
-    match writeas:
-        case "jsonl":
-            with jl.open(output_path, "w") as writer:
-                for i, partition in enumerate(chain.with_progress_bar()):
-                    assignment_series = partition.assignment.to_series()
-                    ordered_assignment = (
-                        assignment_series.loc[graph_node_order].astype(int).to_list()
-                    )
-                    writer.write(
-                        {
-                            "assignment": ordered_assignment,
-                            "sample": i + 1,
-                        }
-                    )
+    ) as partitions:
+        for _ in partitions:
+            pass
 
-        case "ben":
-            with BenEncoder(output_path, overwrite=True) as encoder:
-                for partition in chain.with_progress_bar():
-                    assignment_series = partition.assignment.to_series()
-                    ordered_assignment = (
-                        assignment_series.loc[graph_node_order].astype(int).to_list()
-                    )
-                    encoder.write(ordered_assignment)
-
-        case _:
-            raise ValueError(f"Unsupported writeas format: {writeas}")
+    click.echo(f"Recorded {len(chain.recording):,} plans to {output_path}.", err=True)
 
 
 if __name__ == "__main__":

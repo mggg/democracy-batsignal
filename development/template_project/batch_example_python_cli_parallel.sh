@@ -6,9 +6,6 @@ TOPDIR="${SCRIPT_DIR}"
 
 mkdir -p "${TOPDIR}/chain_outputs" "${TOPDIR}/chain_logs"
 
-export PYTHONHASHSEED=0
-# source .env # <- This will also work
-
 # ===================================================================
 #   IGNORE THE FOLLOWING SECTION. IT JUST HELPS TO MANAGE RESOURCES
 # ===================================================================

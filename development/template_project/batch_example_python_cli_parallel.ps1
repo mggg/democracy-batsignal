@@ -5,7 +5,6 @@ param(
 )
 
 $TOPDIR = (Resolve-Path $PSScriptRoot).Path
-$env:PYTHONHASHSEED = '0'
 
 $chainOut  = Join-Path $TOPDIR 'chain_outputs'
 $chainLogs = Join-Path $TOPDIR 'chain_logs'
@@ -41,7 +40,6 @@ foreach ($seed in $RngSeeds)
 
         Set-StrictMode -Version Latest
         $ErrorActionPreference = 'Stop'
-        $env:PYTHONHASHSEED = '0'
 
         # Cross-platform paths
         $exampleCli = Join-Path $topdir (Join-Path 'pipeline_scripts' 'example_cli.py')

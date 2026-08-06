@@ -6,9 +6,6 @@ TOPDIR="${SCRIPT_DIR}"
 
 mkdir -p "${TOPDIR}/chain_outputs" "${TOPDIR}/chain_logs"
 
-export PYTHONHASHSEED=0
-# source .env # <- This will also work
-
 rng_seeds=(42 43 44)
 n_steps=1000
 

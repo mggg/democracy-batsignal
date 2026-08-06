@@ -6,7 +6,6 @@ param(
 )
 
 $TOPDIR = (Resolve-Path $PSScriptRoot).Path
-$env:PYTHONHASHSEED = '0'
 
 $chainOut  = Join-Path $TOPDIR 'chain_outputs'
 $chainLogs = Join-Path $TOPDIR 'chain_logs'

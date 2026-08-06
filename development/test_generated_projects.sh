@@ -2,11 +2,12 @@
 
 set -euo pipefail
 
-ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+DEVELOPMENT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+ROOT_DIR=$(cd "$DEVELOPMENT_DIR/.." && pwd -P)
 IMAGE_NAME=${BATSIGNAL_TEST_IMAGE:-democracy-batsignal-smoke}
 
 if [[ "${BATSIGNAL_IN_CONTAINER:-}" != "1" ]]; then
-    docker build --tag "$IMAGE_NAME" --file "$ROOT_DIR/Dockerfile" "$ROOT_DIR"
+    docker build --tag "$IMAGE_NAME" --file "$DEVELOPMENT_DIR/Dockerfile" "$ROOT_DIR"
     docker run --rm "$IMAGE_NAME"
     exit
 fi

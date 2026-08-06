@@ -30,7 +30,7 @@ RUN printf '%s\n' y bash_project y y 3.11 \
 FROM powershell-project AS smoke-test
 
 COPY --from=bash-project /projects/bash_project /projects/bash_project
-COPY test_generated_projects.sh /usr/local/bin/test-generated-projects
+COPY development/test_generated_projects.sh /usr/local/bin/test-generated-projects
 RUN chmod +x /usr/local/bin/test-generated-projects
 
 ENV BATSIGNAL_IN_CONTAINER=1

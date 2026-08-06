@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Regenerate the installers from template_project/ and installer_src/.
+"""Regenerate the installers from development/template_project and installer_src.
 
 The two installers are single-file, fully self-contained scripts that users can carry
-around on their own. Edit the runnable project under template_project/ (or the
-installer skeletons under installer_src/) and rerun this script; never edit the
-generated installers directly.
+around on their own. Edit the runnable project or installer skeletons under development/
+and rerun this script; never edit the generated installers directly.
 
 Usage:
-    python3 generate_installers.py          # rewrite both installers
-    python3 generate_installers.py --check  # exit 1 if the installers are out of date
+    python3 development/generate_installers.py          # rewrite both installers
+    python3 development/generate_installers.py --check  # check whether they are current
 """
 
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-TEMPLATE = ROOT / "template_project"
-SRC = ROOT / "installer_src"
+DEVELOPMENT = Path(__file__).resolve().parent
+ROOT = DEVELOPMENT.parent
+TEMPLATE = DEVELOPMENT / "template_project"
+SRC = DEVELOPMENT / "installer_src"
 MARKER = "# {{GENERATED_PAYLOADS}}"
 HEREDOC_EOF = "TEMPLATE_PAYLOAD_EOF"
 PLATFORM_SUFFIX = {"bash": ".sh", "powershell": ".ps1"}
@@ -27,8 +27,8 @@ OUTPUT_DIRECTORIES = {"chain_logs", "chain_outputs", "data", "dev_files", "figur
 INCLUDED_OUTPUT_FILES = {"data/alt_plan_pa.json"}
 
 BANNER = [
-    "====  GENERATED PAYLOADS (from template_project/) -- DO NOT EDIT BY HAND  ====",
-    "====  regenerate with: python3 generate_installers.py                     ====",
+    "====  GENERATED PAYLOADS (from development/template_project/) -- DO NOT EDIT  ====",
+    "====  regenerate with: python3 development/generate_installers.py             ====",
 ]
 
 
@@ -129,7 +129,8 @@ def main():
             print(f"wrote {name}")
 
     if stale:
-        print(f"OUT OF DATE: {', '.join(stale)} -- run: python3 generate_installers.py")
+        command = "python3 development/generate_installers.py"
+        print(f"OUT OF DATE: {', '.join(stale)} -- run: {command}")
         return 1
     if check:
         print("installers are up to date")

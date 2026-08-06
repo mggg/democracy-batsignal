@@ -5,16 +5,17 @@ dev_files
 
 !.gitignore
 !.dockerignore
-!Dockerfile
 !democracy-batsignal.ps1
 !democracy-batsignal.sh
 !README.md
-!test_generated_projects.sh
 
-!template_project/
-!template_project/**
-
-!generate_installers.py
-!test_generate_installers.py
-!installer_src/
-!installer_src/**
+!development/
+development/*
+!development/Dockerfile
+!development/generate_installers.py
+!development/installer_src/
+!development/installer_src/**
+!development/template_project/
+!development/template_project/**
+!development/test_generate_installers.py
+!development/test_generated_projects.sh

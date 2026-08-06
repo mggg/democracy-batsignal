@@ -76,22 +76,26 @@ subsampling, and the batch scripts export `PYTHONHASHSEED=0` so GerryChain runs 
 
 ## Repo development
 
+The only user-facing files at the repository root are this README and the two downloadable
+installers.
+Development-only sources and tests live under `development/`.
+
 `democracy-batsignal.sh` and `democracy-batsignal.ps1` are **generated files**; do not edit them
 directly.
 The sources are:
 
-- `template_project/` — a runnable uv project and the source of every generated project.
+- `development/template_project/` — a runnable uv project and the source of every generated project.
   Edit its `pyproject.toml`, scripts, data, or directory layout as you would any other
   project. Keep both `.sh` and `.ps1` helper variants beside each other; the generator
   includes only the variant for each installer.
-- `installer_src/skeleton.sh` and `installer_src/skeleton.ps1` — the installer logic, with a
-  `# {{GENERATED_PAYLOADS}}` marker where the template files get embedded.
+- `development/installer_src/` — the Bash and PowerShell installer logic, with a
+  `# {{GENERATED_PAYLOADS}}` marker where the template files are embedded.
 
 After changing any of those, regenerate the installers with:
 
 ```bash
-python3 generate_installers.py          # rewrite democracy-batsignal.sh / .ps1
-python3 generate_installers.py --check  # verify they are up to date (useful in CI)
+python3 development/generate_installers.py          # rewrite democracy-batsignal.sh / .ps1
+python3 development/generate_installers.py --check  # verify they are current
 ```
 
 The generator embeds UTF-8 project files, preserves directories represented by `.gitkeep`,
@@ -104,7 +108,7 @@ Run the generated installers and every example workflow in a disposable Ubuntu/P
 container with:
 
 ```bash
-./test_generated_projects.sh
+./development/test_generated_projects.sh
 ```
 
 The Docker build runs each installer in its own clean stage, including separate uv, Rust, and

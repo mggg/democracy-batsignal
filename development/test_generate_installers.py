@@ -4,6 +4,11 @@ from pathlib import Path
 
 import generate_installers
 
+DEVELOPMENT = Path(__file__).resolve().parent
+ROOT = DEVELOPMENT.parent
+TEMPLATE = DEVELOPMENT / "template_project"
+INSTALLER_SRC = DEVELOPMENT / "installer_src"
+
 
 class ProjectPathsTest(unittest.TestCase):
     def test_selects_platform_scripts_and_preserves_directories(self):
@@ -40,7 +45,7 @@ class ProjectPathsTest(unittest.TestCase):
 
 class InstallerSkeletonTest(unittest.TestCase):
     def test_python_cli_uses_recorded_chain(self):
-        text = Path("template_project/pipeline_scripts/example_cli.py").read_text()
+        text = (TEMPLATE / "pipeline_scripts/example_cli.py").read_text()
 
         self.assertIn("RecordedChain", text)
         self.assertIn("chain.graph", text)
@@ -49,8 +54,8 @@ class InstallerSkeletonTest(unittest.TestCase):
         self.assertNotIn("--writeas", text)
 
     def test_installers_download_the_same_verified_pa_geometry(self):
-        bash = Path("installer_src/skeleton.sh").read_text()
-        powershell = Path("installer_src/skeleton.ps1").read_text()
+        bash = (INSTALLER_SRC / "skeleton.sh").read_text()
+        powershell = (INSTALLER_SRC / "skeleton.ps1").read_text()
         url_root = "https://raw.githubusercontent.com/mggg/democracy-batsignal"
         revision = "13c1098d244df946263c9353a478ecf66ac8e484"
         path = "template_project/data/pa_gdf.parquet"
@@ -63,9 +68,9 @@ class InstallerSkeletonTest(unittest.TestCase):
             self.assertIn(sha256, installer)
 
     def test_installers_use_python_ben_and_pinned_rustrecom(self):
-        bash = Path("installer_src/skeleton.sh").read_text()
-        powershell = Path("installer_src/skeleton.ps1").read_text()
-        pyproject = Path("template_project/pyproject.toml").read_text()
+        bash = (INSTALLER_SRC / "skeleton.sh").read_text()
+        powershell = (INSTALLER_SRC / "skeleton.ps1").read_text()
+        pyproject = (TEMPLATE / "pyproject.toml").read_text()
 
         self.assertIn('"binary-ensemble>=2.0"', pyproject)
         for installer in (bash, powershell):
@@ -76,7 +81,7 @@ class InstallerSkeletonTest(unittest.TestCase):
             self.assertNotIn("ben-process", installer)
 
     def test_powershell_uv_bootstrap_supports_windows_and_unix(self):
-        powershell = Path("installer_src/skeleton.ps1").read_text()
+        powershell = (INSTALLER_SRC / "skeleton.ps1").read_text()
 
         self.assertIn("https://astral.sh/uv/install.ps1", powershell)
         self.assertIn("https://astral.sh/uv/install.sh", powershell)
@@ -87,17 +92,17 @@ class InstallerSkeletonTest(unittest.TestCase):
         self.assertIn("https://sh.rustup.rs", powershell)
 
     def test_bash_rustup_bootstrap_is_noninteractive(self):
-        bash = Path("installer_src/skeleton.sh").read_text()
+        bash = (INSTALLER_SRC / "skeleton.sh").read_text()
 
         self.assertIn("https://sh.rustup.rs | sh -s -- -y", bash)
 
     def test_distributed_sources_do_not_reference_frcw(self):
         sources = {
-            "README.md": Path("README.md").read_text(),
-            "installer_src/skeleton.sh": Path("installer_src/skeleton.sh").read_text(),
-            "installer_src/skeleton.ps1": Path("installer_src/skeleton.ps1").read_text(),
-            "democracy-batsignal.sh": Path("democracy-batsignal.sh").read_text(),
-            "democracy-batsignal.ps1": Path("democracy-batsignal.ps1").read_text(),
+            "README.md": (ROOT / "README.md").read_text(),
+            "installer_src/skeleton.sh": (INSTALLER_SRC / "skeleton.sh").read_text(),
+            "installer_src/skeleton.ps1": (INSTALLER_SRC / "skeleton.ps1").read_text(),
+            "democracy-batsignal.sh": (ROOT / "democracy-batsignal.sh").read_text(),
+            "democracy-batsignal.ps1": (ROOT / "democracy-batsignal.ps1").read_text(),
         }
         for platform in ("bash", "powershell"):
             for relative_path, content in generate_installers.project_paths(platform)[1]:
@@ -108,8 +113,8 @@ class InstallerSkeletonTest(unittest.TestCase):
 
     def test_rustrecom_examples_use_cli_arguments(self):
         scripts = (
-            Path("template_project/pipeline_scripts/pa_example_script_vanilla.sh"),
-            Path("template_project/pipeline_scripts/pa_example_script_vanilla.ps1"),
+            TEMPLATE / "pipeline_scripts/pa_example_script_vanilla.sh",
+            TEMPLATE / "pipeline_scripts/pa_example_script_vanilla.ps1",
         )
         for script in scripts:
             text = script.read_text()
@@ -124,8 +129,8 @@ class InstallerSkeletonTest(unittest.TestCase):
 
     def test_rustrecom_opt_example_uses_gingles_partial(self):
         scripts = (
-            Path("template_project/pipeline_scripts/pa_example_script_opt.sh"),
-            Path("template_project/pipeline_scripts/pa_example_script_opt.ps1"),
+            TEMPLATE / "pipeline_scripts/pa_example_script_opt.sh",
+            TEMPLATE / "pipeline_scripts/pa_example_script_opt.ps1",
         )
         for script in scripts:
             text = script.read_text()
@@ -133,7 +138,7 @@ class InstallerSkeletonTest(unittest.TestCase):
             self.assertIn("rustrecom tilted", text)
             self.assertIn("rustrecom_objectives/gingles_partial.json", text)
 
-        objective_dir = Path("template_project/pipeline_scripts/rustrecom_objectives")
+        objective_dir = TEMPLATE / "pipeline_scripts/rustrecom_objectives"
         objectives = {
             json.loads(path.read_text())["objective"] for path in objective_dir.glob("*.json")
         }

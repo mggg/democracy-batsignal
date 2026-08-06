@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
-# This installer is assembled from installer_src/skeleton.ps1 and template_project/.
-# Run 'python3 generate_installers.py' after editing either source. Do not edit the
-# generated democracy-batsignal.ps1 directly.
+# This installer is assembled from development/installer_src/skeleton.ps1 and
+# development/template_project/. Run 'python3 development/generate_installers.py'
+# after editing either source. Do not edit the generated democracy-batsignal.ps1 directly.
 # ---------------------------------------------------------------------------
 
 Set-StrictMode -Version Latest

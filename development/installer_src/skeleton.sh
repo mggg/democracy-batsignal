@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 # ---------------------------------------------------------------------------
-# This installer is assembled from installer_src/skeleton.sh and template_project/.
-# Run 'python3 generate_installers.py' after editing either source. Do not edit the
-# generated democracy-batsignal.sh directly.
+# This installer is assembled from development/installer_src/skeleton.sh and
+# development/template_project/. Run 'python3 development/generate_installers.py'
+# after editing either source. Do not edit the generated democracy-batsignal.sh directly.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail

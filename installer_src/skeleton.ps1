@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
-# THIS FILE IS GENERATED from installer_src/skeleton.ps1 and template_project/.
-# Edit those sources and run 'python3 generate_installers.py' instead of
-# editing this script directly.
+# This installer is assembled from installer_src/skeleton.ps1 and template_project/.
+# Run 'python3 generate_installers.py' after editing either source. Do not edit the
+# generated template_maker.ps1 directly.
 # ---------------------------------------------------------------------------
 
 Set-StrictMode -Version Latest
@@ -294,7 +294,7 @@ function Confirm-Cargo
     $choice = Read-Host "Cargo not found. Install Rust/Cargo via rustup now? (y/[n])"
     if ($choice -notin @('y','Y'))
     {
-        Write-Err "Cargo is required for FRCW/BEN path. Exiting."
+        Write-Err "Cargo is required to install the Rust command-line tools. Exiting."
         exit 1
     }
     Write-Info "Installing Rust/Cargo (rustup)..."
@@ -369,38 +369,15 @@ function Main
         Write-Warn "No project name provided. Using default: $projectName"
     }
 
-    $useFrcw = Read-Host "Would you like to use RustReCom in this project? (y/[n])"
-    if ($useFrcw -match '^(y|Y)$')
+    $useRustReCom = Read-Host "Would you like to use RustReCom in this project? (y/[n])"
+    if ($useRustReCom -match '^(y|Y)$')
     {
         Confirm-BuildTools
         Confirm-Cargo
         Write-Info "Installing RustReCom (rustrecom, version 0.2.0)..."
-        & cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --force
+        & cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --locked --force
         Assert-NativeSuccess "RustReCom installation"
         Write-OK "RustReCom installed."
-        Write-Info "Installing binary-ensemble..."
-        & cargo install binary-ensemble --force
-        Assert-NativeSuccess "binary-ensemble installation"
-        Write-OK "binary-ensemble installed."
-        Write-Info "Installing ben-process (metrics engine)..."
-        & cargo install --git "https://github.com/peterrrock2/ben-process" --force
-        Assert-NativeSuccess "ben-process installation"
-        Write-OK "ben-process installed."
-    } else
-    {
-        $ans = Read-Host "Would you like to use BEN in this project? (y/[n])"
-        if ($ans -match '^(y|Y)$')
-        {
-            Confirm-Cargo
-            Write-Info "Installing binary-ensemble..."
-            & cargo install binary-ensemble --force
-            Assert-NativeSuccess "binary-ensemble installation"
-            Write-OK "binary-ensemble installed."
-            Write-Info "Installing ben-process (metrics engine)..."
-            & cargo install --git "https://github.com/peterrrock2/ben-process" --force
-            Assert-NativeSuccess "ben-process installation"
-            Write-OK "ben-process installed."
-        }
     }
 
     $pythonVersion = Read-Host "What python version would you like (3.11, 3.12, 3.13, 3.14)? (default: 3.11)"

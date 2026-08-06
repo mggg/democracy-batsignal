@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 # ---------------------------------------------------------------------------
-# THIS FILE IS GENERATED from installer_src/skeleton.sh and template_project/.
-# Edit those sources and run 'python3 generate_installers.py' instead of
-# editing this script directly.
+# This installer is assembled from installer_src/skeleton.sh and template_project/.
+# Run 'python3 generate_installers.py' after editing either source. Do not edit the
+# generated template_maker.sh directly.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -103,18 +103,10 @@ function check_cargo_installed() {
             fi
             echo "Rust and Cargo have been installed."
         else
-            echo "Cargo is required to use RustReCom. Exiting."
+            echo "Cargo is required to install the Rust command-line tools. Exiting."
             exit 1
         fi
     fi
-}
-
-function install_ben_tools() {
-    echo "Installing binary-ensemble..."
-    cargo install binary-ensemble --force
-    echo "Installing ben-process (metrics engine)..."
-    cargo install --git "https://github.com/peterrrock2/ben-process" --force
-    echo "BEN tools have been installed."
 }
 
 # ==================================================
@@ -163,19 +155,12 @@ function main() {
         echo "No project name provided. Using default name: $project_name"
     fi
 
-    read -p "Would you like to use RustReCom in this project? (y/[n]): " use_frcw
-    if [[ "$use_frcw" == "y" || "$use_frcw" == "Y" ]]; then
+    read -p "Would you like to use RustReCom in this project? (y/[n]): " use_rustrecom
+    if [[ "$use_rustrecom" == "y" || "$use_rustrecom" == "Y" ]]; then
         check_cargo_installed
         echo "Installing RustReCom (rustrecom, version 0.2.0)..."
-        cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --force
+        cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --locked --force
         echo "RustReCom has been installed."
-        install_ben_tools
-    else
-        read -p "Would you like to use BEN in this project? (y/[n]): " use_ben
-        if [[ "$use_ben" == "y" || "$use_ben" == "Y" ]]; then
-            check_cargo_installed
-            install_ben_tools
-        fi
     fi
 
     prompt="What python version would you like to use (3.11, 3.12, 3.13, 3.14)? (default: 3.11): "

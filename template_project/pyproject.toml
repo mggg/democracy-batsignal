@@ -5,7 +5,7 @@ description = "A ready-to-run redistricting analysis project"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "binary-ensemble>=1.0",
+    "binary-ensemble>=2.0",
     "click",
     "gerrychain>=1.0.0",
     "gerrytools>=2.0.1",

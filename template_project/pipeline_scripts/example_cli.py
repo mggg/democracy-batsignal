@@ -1,8 +1,10 @@
 """Run and record a GerryChain ReCom chain."""
 
 import sys
+from collections.abc import Hashable
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import click
 from gerrychain import Graph, Partition
@@ -29,6 +31,21 @@ def load_graph(graph_path: Path) -> Graph:
         return Graph.from_file(str(graph_path))
     except Exception as error:
         raise click.ClickException(f"Failed to load graph from {graph_path}: {error}") from error
+
+
+def integer_assignment(graph: Any, assignment_column: str) -> dict[Hashable, int]:
+    """Return a BENDL-compatible integer assignment from a graph node attribute."""
+    raw_assignment: dict[Hashable, Any] = {
+        node: data[assignment_column] for node, data in graph.nodes(data=True)
+    }
+    try:
+        return {node: int(label) for node, label in raw_assignment.items()}
+    except (TypeError, ValueError):
+        label_ids: dict[Hashable, int] = {}
+        return {
+            node: label_ids.setdefault(label, len(label_ids))
+            for node, label in raw_assignment.items()
+        }
 
 
 @click.command()
@@ -89,7 +106,7 @@ def main(
 
     chain.initial_partition = Partition(
         chain.graph,
-        assignment=starting_plan,
+        assignment=integer_assignment(chain.graph, starting_plan),
         updaters={"population": Tally(pop_col, alias="population")},
     )
 

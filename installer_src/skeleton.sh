@@ -6,6 +6,8 @@
 # editing this script directly.
 # ---------------------------------------------------------------------------
 
+set -euo pipefail
+
 # ========================================
 # ========  PRE-REQUISITE CHECKS  ========
 # ========================================
@@ -107,6 +109,14 @@ function check_cargo_installed() {
     fi
 }
 
+function install_ben_tools() {
+    echo "Installing binary-ensemble..."
+    cargo install binary-ensemble --force
+    echo "Installing ben-process (metrics engine)..."
+    cargo install --git "https://github.com/peterrrock2/ben-process" --force
+    echo "BEN tools have been installed."
+}
+
 # ==================================================
 # ========  EMBEDDED PROJECT FILES  ================
 # ==================================================
@@ -159,6 +169,13 @@ function main() {
         echo "Installing RustReCom (rustrecom, version 0.2.0)..."
         cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --force
         echo "RustReCom has been installed."
+        install_ben_tools
+    else
+        read -p "Would you like to use BEN in this project? (y/[n]): " use_ben
+        if [[ "$use_ben" == "y" || "$use_ben" == "Y" ]]; then
+            check_cargo_installed
+            install_ben_tools
+        fi
     fi
 
     prompt="What python version would you like to use (3.11, 3.12, 3.13, 3.14)? (default: 3.11): "
@@ -173,8 +190,12 @@ function main() {
     esac
 
     echo "Creating project: $project_name"
-    mkdir -p "$project_name"
-    cd "$project_name" || exit
+    if [[ -e "$project_name" ]]; then
+        echo "A file or directory already exists at '$project_name'. Exiting."
+        exit 1
+    fi
+    mkdir -- "$project_name"
+    cd -- "$project_name"
 
     uv python install "$python_version"
 
@@ -188,18 +209,25 @@ function main() {
     echo "Installing the project environment with uv ($python_version)..."
     uv sync --python "$python_version"
 
-    # Grab the PA example data. The zip is extracted with the project's Python so that
-    # no unzip/bsdtar/tar is needed on the host.
-    echo "Downloading PA example data..."
-    pa_zip="$(mktemp)"
-    pa_url="https://github.com/mggg-states/PA-shapefiles/raw/refs/heads/master/PA_2020_vtds.zip"
-    if ! download_with_retries "$pa_url" "$pa_zip"; then
+    echo "Downloading PA geometry..."
+    pa_url="https://raw.githubusercontent.com/mggg/democracy-batsignal"
+    pa_url+="/13c1098d244df946263c9353a478ecf66ac8e484/template_project/data/pa_gdf.parquet"
+    pa_sha256="06b3b927b09e3f049623869d0b15e20b1363a2eb4dad43461915382fc165446c"
+    pa_tmp="$(mktemp)"
+    if ! download_with_retries "$pa_url" "$pa_tmp"; then
         echo "Failed to download PA example data. Exiting."
-        rm -f "$pa_zip"
+        rm -f "$pa_tmp"
         exit 1
     fi
-    uv run python -m zipfile -e "$pa_zip" "data"
-    rm -f "$pa_zip"
+    actual_sha256="$(uv run python -c \
+        'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' \
+        "$pa_tmp")"
+    if [[ "$actual_sha256" != "$pa_sha256" ]]; then
+        echo "PA data checksum verification failed. Exiting."
+        rm -f "$pa_tmp"
+        exit 1
+    fi
+    mv "$pa_tmp" "data/pa_gdf.parquet"
 
     echo "Your project is ready! You may need to restart your shell for uv to work properly."
 }

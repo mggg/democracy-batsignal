@@ -27,14 +27,14 @@ then creates the project folder next to wherever you ran it from.
 
 Both installers are fully self-contained single files. You do not need to clone this repo; copying
 just `template_maker.sh` or `template_maker.ps1` onto a machine is enough. The only network access
-needed is for installing the tools themselves and downloading the MN example data.
+needed is for installing the tools themselves and downloading the PA example geometry.
 
 ## What you get
 
 ```
 my_project/
 ├── pyproject.toml            # uv-managed environment (gerrychain, binary-ensemble, ...)
-├── JSON_dualgraphs/          # dual graphs: gerrymandria.json and MN_precincts.geojson examples
+├── JSON_dualgraphs/          # dual graphs: gerrymandria.json and pa_dualgraph.json examples
 ├── pipeline_scripts/
 │   ├── example_cli.py        # click CLI that records a GerryChain ReCom chain as BENDL
 │   ├── rust_example_script.* # the same idea, but running a chain through RustReCom

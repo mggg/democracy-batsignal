@@ -37,12 +37,19 @@ class InstallerSkeletonTest(unittest.TestCase):
         self.assertNotIn("BenEncoder", text)
         self.assertNotIn("--writeas", text)
 
-    def test_pa_archive_uses_one_temp_file_variable(self):
-        skeleton = Path("installer_src/skeleton.sh").read_text()
-        pa_download = skeleton[skeleton.index('echo "Downloading PA example data..."') :]
+    def test_installers_download_the_same_verified_pa_geometry(self):
+        bash = Path("installer_src/skeleton.sh").read_text()
+        powershell = Path("installer_src/skeleton.ps1").read_text()
+        url_root = "https://raw.githubusercontent.com/mggg/democracy-batsignal"
+        revision = "13c1098d244df946263c9353a478ecf66ac8e484"
+        path = "template_project/data/pa_gdf.parquet"
+        sha256 = "06b3b927b09e3f049623869d0b15e20b1363a2eb4dad43461915382fc165446c"
 
-        self.assertNotIn("mn_zip", pa_download)
-        self.assertGreaterEqual(pa_download.count('"$pa_zip"'), 3)
+        for installer in (bash, powershell):
+            self.assertIn(url_root, installer)
+            self.assertIn(revision, installer)
+            self.assertIn(path, installer)
+            self.assertIn(sha256, installer)
 
     def test_rustrecom_examples_use_cli_arguments(self):
         scripts = (

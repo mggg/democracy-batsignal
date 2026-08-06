@@ -31,6 +31,15 @@ function Test-Command
     return [bool](Get-Command $Name -ErrorAction SilentlyContinue)
 }
 
+function Assert-NativeSuccess
+{
+    param([Parameter(Mandatory)][string]$Description)
+    if ($LASTEXITCODE -ne 0)
+    {
+        throw "$Description failed with exit code $LASTEXITCODE."
+    }
+}
+
 function Invoke-WithRetry
 {
     param(
@@ -367,12 +376,15 @@ function Main
         Confirm-Cargo
         Write-Info "Installing RustReCom (rustrecom, version 0.2.0)..."
         & cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --force
+        Assert-NativeSuccess "RustReCom installation"
         Write-OK "RustReCom installed."
         Write-Info "Installing binary-ensemble..."
         & cargo install binary-ensemble --force
+        Assert-NativeSuccess "binary-ensemble installation"
         Write-OK "binary-ensemble installed."
         Write-Info "Installing ben-process (metrics engine)..."
         & cargo install --git "https://github.com/peterrrock2/ben-process" --force
+        Assert-NativeSuccess "ben-process installation"
         Write-OK "ben-process installed."
     } else
     {
@@ -382,25 +394,33 @@ function Main
             Confirm-Cargo
             Write-Info "Installing binary-ensemble..."
             & cargo install binary-ensemble --force
+            Assert-NativeSuccess "binary-ensemble installation"
             Write-OK "binary-ensemble installed."
             Write-Info "Installing ben-process (metrics engine)..."
             & cargo install --git "https://github.com/peterrrock2/ben-process" --force
+            Assert-NativeSuccess "ben-process installation"
             Write-OK "ben-process installed."
         }
     }
 
-    $pythonVersion = Read-Host "What python version would you like (3.11, 3.12, 3.13)? (default: 3.11)"
-    if ($pythonVersion -notmatch '^(3\.11|3\.12|3\.13)$')
+    $pythonVersion = Read-Host "What python version would you like (3.11, 3.12, 3.13, 3.14)? (default: 3.11)"
+    if ($pythonVersion -notmatch '^(3\.11|3\.12|3\.13|3\.14)$')
     {
         Write-Warn "Invalid python version. Using default 3.11."
         $pythonVersion = '3.11'
     }
 
     Write-Info "Creating project: $projectName"
-    New-Item -ItemType Directory -Force -Path $projectName | Out-Null
+    if (Test-Path $projectName)
+    {
+        Write-Err "A file or directory already exists at '$projectName'. Exiting."
+        exit 1
+    }
+    New-Item -ItemType Directory -Path $projectName | Out-Null
     Push-Location $projectName
 
     & uv python install $pythonVersion
+    Assert-NativeSuccess "Python installation"
 
     Write-Info "Writing project files..."
     Write-PayloadFiles
@@ -413,23 +433,28 @@ function Main
 
     Write-Info "Installing the project environment with uv ($pythonVersion)..."
     & uv sync --python $pythonVersion
+    Assert-NativeSuccess "Project environment installation"
 
-    Write-Info "Downloading MN_precincts.geojson..."
-    $destDir = "JSON_dualgraphs"
-    $uri = "https://github.com/mggg/GerryChain/raw/main/docs/_static/MN.zip"
+    Write-Info "Downloading PA geometry..."
+    $uri = "https://raw.githubusercontent.com/mggg/democracy-batsignal/" +
+        "13c1098d244df946263c9353a478ecf66ac8e484/template_project/data/pa_gdf.parquet"
+    $expectedSha256 = "06b3b927b09e3f049623869d0b15e20b1363a2eb4dad43461915382fc165446c"
+    $destination = Join-Path "data" "pa_gdf.parquet"
 
     Invoke-WithRetry -MaxAttempts 5 -Action {
-
-        # create a temp *zip* path (PS5 Expand-Archive checks extension)
-        $tmpZip = Join-Path $env:TEMP ("MN_" + [guid]::NewGuid().ToString() + ".zip")
-
+        $tmpFile = [IO.Path]::GetTempFileName()
         try
         {
-            Invoke-WebRequest -Uri $uri -OutFile $tmpZip -UseBasicParsing
-            Expand-Archive -LiteralPath $tmpZip -DestinationPath $destDir -Force
+            Invoke-WebRequest -Uri $uri -OutFile $tmpFile -UseBasicParsing
+            $actualSha256 = (Get-FileHash -LiteralPath $tmpFile -Algorithm SHA256).Hash.ToLower()
+            if ($actualSha256 -ne $expectedSha256)
+            {
+                throw "PA data checksum verification failed."
+            }
+            Move-Item -LiteralPath $tmpFile -Destination $destination -Force
         } finally
         {
-            Remove-Item -LiteralPath $tmpZip -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $tmpFile -ErrorAction SilentlyContinue
         }
     }
 

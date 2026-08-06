@@ -6,7 +6,7 @@
 # after editing either source. Do not edit the generated democracy-batsignal.sh directly.
 # ---------------------------------------------------------------------------
 
-set -euo pipefail
+set -e
 
 # ========================================
 # ========  PRE-REQUISITE CHECKS  ========

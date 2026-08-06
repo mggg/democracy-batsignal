@@ -1,7 +1,5 @@
 FROM mcr.microsoft.com/powershell:ubuntu-24.04@sha256:042240d57ec9e47e511033b92625a8d95875ee5860af3015992c248b58a8be81 AS base
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
 RUN apt-get update -qq \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
         build-essential \

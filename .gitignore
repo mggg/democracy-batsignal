@@ -12,6 +12,7 @@ dev_files
 !development/
 development/*
 !development/Dockerfile
+!development/clean_notebooks.py
 !development/generate_installers.py
 !development/installer_src/
 !development/installer_src/**

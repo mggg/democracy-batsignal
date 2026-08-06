@@ -2,6 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
+import clean_notebooks
 import generate_installers
 
 DEVELOPMENT = Path(__file__).resolve().parent
@@ -36,16 +37,62 @@ class ProjectPathsTest(unittest.TestCase):
         self.assertEqual(bash_script_stems, ps_script_stems)
         self.assertIn("chain_outputs", bash_directories)
         self.assertEqual(bash_directories, ps_directories)
-        self.assertFalse(any(path.endswith(".gitkeep") for path in bash_paths | ps_paths))
+        self.assertFalse(
+            any(path.endswith(".gitkeep") for path in bash_paths | ps_paths)
+        )
         self.assertNotIn(".venv", bash_directories)
         self.assertFalse(any("__pycache__" in path for path in bash_paths | ps_paths))
-        self.assertFalse(any(path.startswith("chain_outputs/") for path in bash_paths | ps_paths))
+        self.assertFalse(
+            any(path.startswith("chain_outputs/") for path in bash_paths | ps_paths)
+        )
         self.assertIn("data/alt_plan_pa.json", bash_paths & ps_paths)
+
+    def test_distributed_notebooks_have_no_execution_state(self):
+        _, files = generate_installers.project_paths("bash")
+        content = dict(files)["notebooks/gerrychain_cut_edges_walkthrough.ipynb"]
+        notebook = json.loads(content)
+
+        self.assertEqual(notebook["metadata"], {})
+        for cell in notebook["cells"]:
+            self.assertEqual(cell["metadata"], {})
+            self.assertNotIn("id", cell)
+            if cell["cell_type"] == "code":
+                self.assertIsNone(cell["execution_count"])
+                self.assertEqual(cell["outputs"], [])
+
+
+class CleanNotebooksTest(unittest.TestCase):
+    def test_removes_transient_state_without_changing_sources(self):
+        original = {
+            "cells": [
+                {
+                    "cell_type": "code",
+                    "execution_count": 3,
+                    "id": "temporary-id",
+                    "metadata": {"collapsed": True},
+                    "outputs": [{"output_type": "stream", "text": ["result\n"]}],
+                    "source": ["print('result')"],
+                }
+            ],
+            "metadata": {"kernelspec": {"display_name": ".venv"}},
+            "nbformat": 4,
+            "nbformat_minor": 5,
+        }
+
+        cleaned = json.loads(clean_notebooks.clean_notebook_text(json.dumps(original)))
+        cell = cleaned["cells"][0]
+
+        self.assertEqual(cleaned["metadata"], {})
+        self.assertEqual(cell["metadata"], {})
+        self.assertNotIn("id", cell)
+        self.assertIsNone(cell["execution_count"])
+        self.assertEqual(cell["outputs"], [])
+        self.assertEqual(cell["source"], ["print('result')"])
 
 
 class InstallerSkeletonTest(unittest.TestCase):
     def test_python_cli_uses_recorded_chain(self):
-        text = (TEMPLATE / "pipeline_scripts/example_cli.py").read_text()
+        text = (TEMPLATE / "pipeline_scripts/chain_runners/example_cli.py").read_text()
 
         self.assertIn("RecordedChain", text)
         self.assertIn("chain.graph", text)
@@ -72,9 +119,12 @@ class InstallerSkeletonTest(unittest.TestCase):
         powershell = (INSTALLER_SRC / "skeleton.ps1").read_text()
         pyproject = (TEMPLATE / "pyproject.toml").read_text()
 
-        self.assertIn('"binary-ensemble>=2.0"', pyproject)
+        self.assertIn('"binary-ensemble>=2.0,<3"', pyproject)
+        self.assertIn('"geopandas"', pyproject)
         for installer in (bash, powershell):
-            normalized = " ".join(installer.replace("\\\n", " ").replace("`\n", " ").split())
+            normalized = " ".join(
+                installer.replace("\\\n", " ").replace("`\n", " ").split()
+            )
 
             self.assertIn('--tag "v0.2.0" --locked', normalized)
             self.assertNotIn("cargo install binary-ensemble", installer)
@@ -88,7 +138,9 @@ class InstallerSkeletonTest(unittest.TestCase):
         self.assertIn("$IsWindowsPlatform", powershell)
         self.assertIn("[IO.Path]::PathSeparator", powershell)
         self.assertNotIn("$env:Path", powershell)
-        self.assertIn('$pyprojectPath = Join-Path $projectPath "pyproject.toml"', powershell)
+        self.assertIn(
+            '$pyprojectPath = Join-Path $projectPath "pyproject.toml"', powershell
+        )
         self.assertIn("https://sh.rustup.rs", powershell)
 
     def test_bash_rustup_bootstrap_is_noninteractive(self):
@@ -105,7 +157,9 @@ class InstallerSkeletonTest(unittest.TestCase):
             "democracy-batsignal.ps1": (ROOT / "democracy-batsignal.ps1").read_text(),
         }
         for platform in ("bash", "powershell"):
-            for relative_path, content in generate_installers.project_paths(platform)[1]:
+            for relative_path, content in generate_installers.project_paths(platform)[
+                1
+            ]:
                 sources[f"template_project/{relative_path}"] = content
 
         for source, content in sources.items():
@@ -113,8 +167,8 @@ class InstallerSkeletonTest(unittest.TestCase):
 
     def test_rustrecom_examples_use_cli_arguments(self):
         scripts = (
-            TEMPLATE / "pipeline_scripts/pa_example_script_vanilla.sh",
-            TEMPLATE / "pipeline_scripts/pa_example_script_vanilla.ps1",
+            TEMPLATE / "pipeline_scripts/chain_runners/pa_example_script_vanilla.sh",
+            TEMPLATE / "pipeline_scripts/chain_runners/pa_example_script_vanilla.ps1",
         )
         for script in scripts:
             text = script.read_text()
@@ -129,18 +183,20 @@ class InstallerSkeletonTest(unittest.TestCase):
 
     def test_rustrecom_opt_example_uses_gingles_partial(self):
         scripts = (
-            TEMPLATE / "pipeline_scripts/pa_example_script_opt.sh",
-            TEMPLATE / "pipeline_scripts/pa_example_script_opt.ps1",
+            TEMPLATE / "pipeline_scripts/chain_runners/pa_example_script_opt.sh",
+            TEMPLATE / "pipeline_scripts/chain_runners/pa_example_script_opt.ps1",
         )
         for script in scripts:
             text = script.read_text()
 
             self.assertIn("rustrecom tilted", text)
             self.assertIn("rustrecom_objectives/gingles_partial.json", text)
+            self.assertIn("--scores-output-file", text)
 
-        objective_dir = TEMPLATE / "pipeline_scripts/rustrecom_objectives"
+        objective_dir = TEMPLATE / "pipeline_scripts/chain_runners/rustrecom_objectives"
         objectives = {
-            json.loads(path.read_text())["objective"] for path in objective_dir.glob("*.json")
+            json.loads(path.read_text())["objective"]
+            for path in objective_dir.glob("*.json")
         }
         self.assertEqual(
             objectives,
@@ -152,6 +208,35 @@ class InstallerSkeletonTest(unittest.TestCase):
                 "polsby_popper",
             },
         )
+
+    def test_python_first_runner_replaces_platform_batch_wrappers(self):
+        runner = (TEMPLATE / "run_chains.py").read_text()
+        quickstart = (TEMPLATE / "QUICKSTART.md").read_text()
+
+        self.assertIn("from pipeline_scripts.run_parallel_chains import", runner)
+        self.assertIn("run_chains(chains, max_workers=MAX_WORKERS)", runner)
+        self.assertIn('ENGINE: ReComEngine = "gerrychain"', runner)
+        self.assertIn('ENGINE = "rustrecom-chain"', quickstart)
+        self.assertIn('ENGINE = "rustrecom-tilted"', quickstart)
+        self.assertEqual(list(TEMPLATE.glob("batch_example*")), [])
+
+    def test_gerrychain_walkthrough_is_a_ten_thousand_step_histogram(self):
+        notebook_path = TEMPLATE / "notebooks/gerrychain_cut_edges_walkthrough.ipynb"
+        notebook = json.loads(notebook_path.read_text())
+        code = "\n".join(
+            "".join(cell["source"])
+            for cell in notebook["cells"]
+            if cell["cell_type"] == "code"
+        )
+
+        self.assertEqual(notebook["nbformat"], 4)
+        self.assertIn("TOTAL_STEPS = 10_000", code)
+        self.assertIn("RecordedChain(", code)
+        self.assertIn("chain.allow_overwrite()", code)
+        self.assertIn("PlanEvaluator(", code)
+        self.assertIn("CutEdges()", code)
+        self.assertIn("Histogram(", code)
+        self.assertIn("histogram.show()", code)
 
 
 if __name__ == "__main__":

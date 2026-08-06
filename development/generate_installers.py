@@ -13,6 +13,8 @@ Usage:
 import sys
 from pathlib import Path
 
+from clean_notebooks import clean_notebook_text
+
 DEVELOPMENT = Path(__file__).resolve().parent
 ROOT = DEVELOPMENT.parent
 TEMPLATE = DEVELOPMENT / "template_project"
@@ -60,6 +62,11 @@ def project_paths(platform):
             content = path.read_text()
         except UnicodeDecodeError as error:
             raise SystemExit(f"{relative}: template files must be UTF-8 text") from error
+        if path.suffix == ".ipynb":
+            try:
+                content = clean_notebook_text(content, relative)
+            except (TypeError, ValueError) as error:
+                raise SystemExit(str(error)) from error
         files.append((relative.as_posix(), content))
 
     return directories, files

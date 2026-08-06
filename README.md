@@ -47,12 +47,12 @@ The installer asks for:
 
 It offers to install missing prerequisites such as uv, Rust/Cargo, and the Windows build tools.
 The chosen Python is installed and managed by uv, so it does not replace the system Python. The
-installer then creates the project, resolves its Python dependencies, and downloads the checked
+installer then creates the project, resolves its Python dependencies, and downloads the pinned
 Pennsylvania example geometry.
 
-RustReCom is optional. Install it if you want the fast Rust chain and optimization examples. The
-Python GerryChain examples work without it. If a newly installed `uv`, `cargo`, or `rustrecom`
-command is not immediately visible in another terminal, restart that terminal first.
+RustReCom supplies the fast ordinary-chain and objective-guided examples. The Python GerryChain
+examples work without it. A newly installed `uv`, `cargo`, or `rustrecom` command becomes available
+in new terminals after the relevant installation directory is added to `PATH`.
 
 ## Verify the installation
 
@@ -68,56 +68,62 @@ If you installed RustReCom, also run:
 
 ```bash
 rustrecom --version
-rustrecom --help
 ```
 
-## Run the Pennsylvania example
+## Ten-minute chain quickstart
 
-The quickest RustReCom example runs an ordinary ReCom chain from the `seed_plan` node attribute in
-the included Pennsylvania dual graph. The shipped scripts default to two seeds and 100,000 steps,
-so reduce the step count while testing.
-
-On macOS or Linux, edit `n_steps` and `rng_seed` near the top of
-`pipeline_scripts/pa_example_script_vanilla.sh`, then run:
+The generated project includes a Python-first
+[quickstart](development/template_project/QUICKSTART.md) and one editable experiment file. Its
+default settings run a 100-step Pennsylvania GerryChain example:
 
 ```bash
-bash pipeline_scripts/pa_example_script_vanilla.sh
+uv run run_chains.py
 ```
 
-On Windows, pass the values as PowerShell parameters:
+To use another graph, edit the `Experiment settings` block near the top of `run_chains.py`. It
+contains the graph path, starting-plan and population columns, random seeds, step count, population
+tolerance, engine, experiment tag, and maximum simultaneous chains.
 
-```powershell
-.\pipeline_scripts\pa_example_script_vanilla.ps1 -NSteps 100 -RngSeeds 42
-```
+Change `ENGINE` to `"gerrychain"` for the modifiable Python workflow, `"rustrecom-chain"` for
+ordinary RustReCom chains, or `"rustrecom-tilted"` with an objective file for objective-guided
+search. The same Python file and command work in Bash and PowerShell.
 
-The result is a self-contained `.bendl` recording in `chain_outputs/`. A BENDL file contains the
-assignment stream, the graph, and run metadata, so downstream scoring does not need a separate
-graph path.
+Successful chains produce self-contained `.bendl` recordings in `chain_outputs/` and one log per
+seed in `chain_logs/`. A BENDL file contains the assignment stream, graph, and run metadata, so
+downstream scoring does not need a separate graph path.
 
-To try objective-guided search, use the matching `pa_example_script_opt` script. It calls
-`rustrecom tilted` with the supplied Gingles partial objective:
+The shell and PowerShell files under `pipeline_scripts/chain_runners/` are direct RustReCom command
+references. `run_chains.py` adds Python-based seed lists, concurrency, logs, and failure handling
+around the same commands.
 
-```bash
-bash pipeline_scripts/pa_example_script_opt.sh
-```
-
-```powershell
-.\pipeline_scripts\pa_example_script_opt.ps1 -NSteps 100 -RngSeeds 42
-```
-
-The optimization examples are demonstrations of search behavior, not legal conclusions about a
-plan or district.
+For an interactive introduction, open
+`notebooks/gerrychain_cut_edges_walkthrough.ipynb` in the generated project. It loads
+Gerrymandria, builds a GerryChain ReCom proposal, runs 10,000 steps, and displays the cut-edge
+histogram. The generated README also maps each common experiment change to the file that owns it.
 
 ## From chains to figures
 
-The included Pennsylvania analysis pipeline expects an ordinary RustReCom output whose filename
-starts with `VANILLA_PA`.
+The supplied Pennsylvania evaluator and ensemble figures process direct RustReCom reference outputs
+whose filenames begin with `VANILLA_PA`.
 
-1. Run `pa_example_script_vanilla` to create one or more recordings in `chain_outputs/`.
+1. Create one or more ordinary RustReCom recordings.
+
+   On macOS or Linux:
+
+   ```bash
+   bash pipeline_scripts/chain_runners/pa_example_script_vanilla.sh
+   ```
+
+   In PowerShell:
+
+   ```powershell
+   .\pipeline_scripts\chain_runners\pa_example_script_vanilla.ps1
+   ```
+
 2. Score those recordings:
 
    ```bash
-   uv run pipeline_scripts/metrics/collect_data_vanilla_pa.py
+   uv run pipeline_scripts/metrics/collect_data_vanilla_pa.py --max-workers 1
    ```
 
 3. Generate the ensemble figures:
@@ -135,21 +141,39 @@ starts with `VANILLA_PA`.
    ```
 
 Statistics are written under `stats/<recording-name>/`, and figures are written under `figures/`.
-The Python commands are the same in PowerShell.
+The Python commands are the same in PowerShell. `--max-workers` controls how many independent BENDL
+files are scored concurrently.
+
+`run_chains.py` uses a shared cross-platform Python runner for GerryChain and both RustReCom modes.
+It limits concurrent child processes, writes one log per seed, stops children when interrupted,
+and exits nonzero if any seed fails. CPU, memory, and I/O requirements scale with `MAX_WORKERS`.
+
+The runner displays one aggregate spinner; child output and progress indicators stay in per-seed
+log files. A representative 10,000-step chain provides an estimate of runtime and output size for a
+particular graph, constraint set, and objective.
+
+`EXPERIMENT_TAG` names the experiment. Parallel-runner filenames use this form:
+
+```text
+<ENGINE>_<OUTPUT_PREFIX>__STEPS_<steps>__RNGSEED_<seed>__TOL_<tol>__SEEDPLN__<plan_name>__TAG_<tag>__DATE_<date>.bendl
+```
+
+The runner adds `PY_` for GerryChain or `RUST_` for either RustReCom mode. Logs use the same stem
+with `.log`; tilted RustReCom score files add `_scores.csv`.
 
 ## What the tools do
 
 - **uv** installs the selected Python, resolves dependencies from `pyproject.toml`, and runs Python
   commands inside the project environment. Prefix project commands with `uv run`.
 - **[GerryChain](https://gerrychain.readthedocs.io/en/latest/)** provides the Python graph,
-  partition, updater, and ReCom APIs. The included `example_cli.py` shows how to record a
-  GerryChain chain directly to BENDL.
+  partition, updater, and ReCom APIs. The included
+  `pipeline_scripts/chain_runners/example_cli.py` shows how to record a GerryChain chain directly
+  to BENDL.
 - **RustReCom** is a fast command-line ReCom implementation. `rustrecom chain` samples an ordinary
   chain, `rustrecom tilted` probabilistically favors better objective scores, and
   `rustrecom short-bursts` repeatedly continues from the best plan found in each burst.
 - **[binary-ensemble](https://binary-ensemble.readthedocs.io/en/latest/)** reads and writes
-  BEN/BENDL assignment streams. It is a Python package in version 2.0, not a separate `ben`
-  command.
+  BEN/BENDL assignment streams through its Python API.
 - **[GerryTools](https://gerrytools.readthedocs.io/en/latest/)** scores recorded ensembles and
   creates the example plots.
 
@@ -163,30 +187,32 @@ failure modes.
 
 ```text
 my_project/
+├── QUICKSTART.md               # ~10-minute guide for adapting the project
+├── run_chains.py               # edit one settings block, then run this file
 ├── pyproject.toml
-├── JSON_dualgraphs/          # example dual graphs
-├── data/                     # geometry and alternate-plan data
+├── JSON_dualgraphs/            # example dual graphs
+├── data/                       # geometry and alternate-plan data
+├── notebooks/                  # interactive GerryChain walkthrough
 ├── pipeline_scripts/
-│   ├── example_cli.py        # GerryChain RecordedChain example
-│   ├── pa_example_script_*   # ordinary and tilted RustReCom examples
-│   ├── rustrecom_objectives/ # reusable objective JSON files
-│   ├── metrics/              # BENDL scoring pipeline
-│   └── figure_generators/    # maps and ensemble plots
-├── batch_example_python_cli_* # sequential and parallel GerryChain examples
-├── chain_outputs/             # BENDL recordings
-├── chain_logs/                # batch-run logs
-├── stats/                     # GerryTools evaluation results
-└── figures/                   # generated PNG files
+│   ├── run_parallel_chains.py  # bounded cross-platform chain runner
+│   ├── chain_runners/          # GerryChain and direct RustReCom references
+│   ├── metrics/                # GerryTools evaluation
+│   └── figure_generators/      # maps and ensemble plots
+├── chain_outputs/              # BENDL recordings
+├── chain_logs/                 # redirected child-process output
+├── stats/                      # EnsembleEvalResult data (Parquet files)
+└── figures/                    # generated PNG files
 ```
 
-Bash projects receive `.sh` helpers, and Windows projects receive equivalent `.ps1` helpers. The
-Python files are identical on every platform.
+Projects created by the Bash installer receive direct `.sh` RustReCom references. Projects created
+by the PowerShell installer receive equivalent `.ps1` references. The same Python entry point runs
+on macOS, Linux, and Windows.
 
 ## Reproducibility
 
-Chain runs use explicit RNG seeds. Record the graph, starting-plan column, population column,
-tolerance, seed, RustReCom variant, and objective settings with any reported result. A fixed seed
-reproduces a run only when the relevant software versions and inputs also stay fixed.
+Chain runs use explicit RNG seeds. BENDL recordings contain the graph, assignment stream, and run
+metadata. Reproduction also depends on the relevant software versions and other inputs remaining
+fixed.
 
 ## Repository development
 
@@ -197,9 +223,15 @@ installers. Maintainer sources and tests live under `development/`.
 `development/template_project/` or `development/installer_src/`, then regenerate them with:
 
 ```bash
+python3 development/clean_notebooks.py
 python3 development/generate_installers.py
 python3 development/generate_installers.py --check
 ```
+
+The notebook cleaner removes outputs, execution counts, cell IDs, and notebook and cell metadata.
+Use `python3 development/clean_notebooks.py --check` in automated checks. The installer generator
+also cleans notebook payloads in memory, so local execution state cannot enter either downloadable
+installer even when the source notebook has not been cleaned first.
 
 The generator includes only the platform-appropriate helper scripts, skips `uv.lock` and local
 caches, and resolves dependencies using the Python version selected during installation.
@@ -210,5 +242,6 @@ Run the complete clean-container check with:
 ./development/test_generated_projects.sh
 ```
 
-It installs both generated project variants independently, runs every Bash and PowerShell helper,
-scores a Pennsylvania recording, generates every figure, and checks the expected artifacts.
+It installs both generated project variants independently and checks the GerryChain, ordinary
+RustReCom, tilted RustReCom, short-bursts, notebook, scoring, and plotting workflows. It also runs
+the template's lint and type checks and verifies the expected artifacts.

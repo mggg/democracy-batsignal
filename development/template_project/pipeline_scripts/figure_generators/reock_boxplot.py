@@ -1,4 +1,5 @@
 from pathlib import Path
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -25,26 +26,6 @@ def original_reock() -> pd.Series:
     return vals
 
 
-def alphabetic_labels(n_labels: int) -> list[str]:
-    """Creates spreadsheet-style labels for the interior district-rank ticks.
-
-    Args:
-        n_labels (int): Number of district-rank categories on the plot.
-
-    Returns:
-        list[str]: Labels for all but the final category.
-    """
-    labels: list[str] = []
-    for i in range(n_labels):
-        label = ""
-        label_len = i // 26 + 1
-        for j in range(label_len):
-            label += chr(ord("A") + ((i - 26) // (26**j)) % 26)
-        labels.append(label[::-1])
-
-    return labels
-
-
 def create_reock_boxes(stats_dir: Path) -> Path:
     """Saves Reock distributions by within-plan district rank for one evaluation run.
 
@@ -54,20 +35,16 @@ def create_reock_boxes(stats_dir: Path) -> Path:
     Returns:
         Path: Location of the saved box plot.
 
-    Raises:
-        TypeError: If the Reock metric is not stored as a pandas DataFrame.
     """
     run = EnsembleEvalResult.open(stats_dir)
-
-    reock_scores = run.read("reock", expand_repetitions=True)
-    if not isinstance(reock_scores, pd.DataFrame):
-        raise TypeError("reock did not produce a DataFrame")
+    reock_scores = run.read("reock", expand_repetitions=True, return_type="dataframe")
     scores_array = np.sort(reock_scores.to_numpy().T, axis=0)
 
     bp = BoxPlot(figure_size=(30, 10))
 
     bp.add_dataset(scores_array)
-    bp.set_xticks(range(1, len(scores_array) + 1), labels=alphabetic_labels(len(scores_array)))
+    district_ranks = range(1, len(scores_array) + 1)
+    bp.set_xticks(district_ranks, labels=[str(rank) for rank in district_ranks])
     bp.set_tick_style("x", size=6)
 
     bp.add_pointset(

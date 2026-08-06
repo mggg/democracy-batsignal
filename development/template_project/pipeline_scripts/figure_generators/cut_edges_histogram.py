@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pandas as pd
 from gerrychain import Graph, Partition
 from gerrytools.plotting import Histogram
 from gerrytools.scoring import EnsembleEvalResult, cut_edges
@@ -34,14 +33,9 @@ def create_cut_edge_hist(stats_dir: Path) -> Path:
     Returns:
         Path: Location of the saved histogram.
 
-    Raises:
-        TypeError: If the cut-edge metric is not stored as a pandas Series.
     """
     run = EnsembleEvalResult.open(stats_dir)
-
-    cut_edge_scores = run.read("cut_edges", expand_repetitions=True)
-    if not isinstance(cut_edge_scores, pd.Series):
-        raise TypeError("cut_edges did not produce a Series")
+    cut_edge_scores = run.read("cut_edges", expand_repetitions=True, return_type="series")
 
     hist = Histogram()
     hist.add_dataset(cut_edge_scores)

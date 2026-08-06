@@ -160,7 +160,7 @@ def save_philadelphia_partisan_choropleth(
 
     # Use an external Matplotlib axes because the district 37 leader lines are ordinary
     # Matplotlib artists added after GerryTools renders its geographic layers.
-    _, ax = plt.subplots(dpi=300)
+    figure, ax = plt.subplots(dpi=300)
 
     plot = GeoPlot(gdf)
     plot.add_choropleth_layer(
@@ -219,7 +219,8 @@ def save_philadelphia_partisan_choropleth(
             # District labels render above this layer, hiding the lines underneath the badge.
             zorder=2.5,
         )
-    plt.savefig(str(output_path), bbox_inches="tight", dpi=300)
+    figure.savefig(str(output_path), bbox_inches="tight", dpi=300)
+    plt.close(figure)
 
 
 def save_recom_district_comparison(gdf: gpd.GeoDataFrame, output_path: Path) -> None:

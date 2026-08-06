@@ -1,3 +1,9 @@
+# This is a direct RustReCom CLI reference. Use run_chains.py to coordinate normal batches.
+# `chain` samples ordinary ReCom plans from the assignment stored on each graph node.
+# Input flags identify the adjacency-data graph and its assignment and population columns.
+# Chain flags set the seed, number of steps, population tolerance, and ReCom proposal variant.
+# Output flags record the graph, metadata, and assignment stream together in a BENDL file.
+
 param(
     [int]$NSteps = 100000,
     [int[]]$RngSeeds = @(42, 43),
@@ -6,10 +12,9 @@ param(
     [string]$PopulationColumn = 'total_pop_20'
 )
 
-$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $GraphJson = Join-Path $ProjectRoot 'JSON_dualgraphs/pa_dualgraph.json'
 $OutputDir = Join-Path $ProjectRoot 'chain_outputs'
-$LogDir = Join-Path $ProjectRoot 'chain_logs'
 $ToleranceLabel = $Tolerance.ToString(
     [System.Globalization.CultureInfo]::InvariantCulture
 ).Replace('.', 'p')
@@ -20,7 +25,7 @@ if (-not (Test-Path -LiteralPath $GraphJson -PathType Leaf))
     exit 1
 }
 
-New-Item -ItemType Directory -Force -Path $OutputDir, $LogDir | Out-Null
+New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 foreach ($Seed in $RngSeeds)
 {

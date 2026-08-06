@@ -9,8 +9,7 @@ ReCom chains, BENDL recording, GerryTools scoring, and figures built from Pennsy
 - Use **binary-ensemble** to inspect BENDL recordings.
 - Use **GerryTools** to score recordings and create plots.
 
-The examples are starting points. Read through a script before increasing its step count or using
-it with another graph.
+All the example files serve as starting points and are intended to be modified later.
 
 ## Reference documentation
 
@@ -25,13 +24,32 @@ it with another graph.
 
 ## Start here
 
-The Democracy Batsignal installer has already created and synchronized the environment. From the
-project root, verify it with:
+Use [QUICKSTART.md](QUICKSTART.md) for the shortest path from a dual graph to a batch of recorded
+ReCom chains. The same Python entry point runs on macOS, Linux, and Windows:
 
 ```bash
-uv run python --version
+uv run run_chains.py
+```
+
+The included settings run a 100-step Pennsylvania GerryChain example. To use another graph, edit
+the `Experiment settings` block near the top of `run_chains.py`. That selects the engine, graph,
+node columns, seeds, step count, population tolerance, experiment tag, and concurrency.
+
+The Democracy Batsignal installer creates and synchronizes the environment. This command reports
+whether the Python packages are importable:
+
+```bash
 uv run python -c "import gerrychain, gerrytools, binary_ensemble; print('Python tools ready')"
 ```
+
+If you chose a RustReCom engine, also verify the standalone executable:
+
+```bash
+rustrecom --version
+```
+
+RustReCom is not installed in the uv environment. It is a Rust executable installed through
+Cargo. The GerryChain examples still work if you skipped it.
 
 If you change `pyproject.toml`, update the environment with:
 
@@ -39,71 +57,64 @@ If you change `pyproject.toml`, update the environment with:
 uv sync
 ```
 
-If you chose to install RustReCom, verify the standalone executable:
+## Where to customize an experiment
 
-```bash
-rustrecom --version
-rustrecom --help
-```
+Each part of an experiment has one primary customization point:
 
-RustReCom is not installed in the uv environment. It is a Rust executable installed through
-Cargo. The GerryChain examples still work if you skipped it.
-
-### A small first run
-
-The RustReCom scripts default to substantial runs. Start with 100 steps and one seed.
-
-On macOS or Linux, edit `n_steps` and `rng_seed` near the top of
-`pipeline_scripts/pa_example_script_vanilla.sh`, then run:
-
-```bash
-bash pipeline_scripts/pa_example_script_vanilla.sh
-```
-
-On Windows:
-
-```powershell
-.\pipeline_scripts\pa_example_script_vanilla.ps1 -NSteps 100 -RngSeeds 42
-```
-
-The resulting BENDL recording appears in `chain_outputs/`. Once that works, increase the step
-count and run multiple seeds for the analysis you actually need.
+- `run_chains.py` contains the normal experiment settings: graph, columns, engine, seeds, ReCom
+  variant, objective, and concurrency.
+- `notebooks/gerrychain_cut_edges_walkthrough.ipynb` is an interactive GerryChain example from
+  graph loading through a 10,000-step cut-edge histogram.
+- `pipeline_scripts/chain_runners/example_cli.py` contains the GerryChain proposal, partition,
+  updaters, and BENDL recording. Modify it for new constraints or acceptance rules.
+- `pipeline_scripts/chain_runners/rustrecom_objectives/` contains RustReCom optimization
+  objectives. Copy the closest JSON example and change its columns or score settings.
+- `pipeline_scripts/metrics/` contains ensemble scoring. Add statistics here when the output will
+  be reused by multiple figures.
+- `pipeline_scripts/figure_generators/` contains maps and plots.
+- `pipeline_scripts/run_parallel_chains.py` owns process scheduling, log capture, and standardized
+  filenames.
+- `pyproject.toml` owns Python dependencies. Run `uv sync` after editing it.
 
 ## Project layout
 
 ```text
 .
+├── QUICKSTART.md              # ~10-minute guide for adapting the project
+├── run_chains.py              # edit one settings block, then run this file
 ├── JSON_dualgraphs/
 │   ├── gerrymandria.json       # small graph for the Python examples
-│   └── pa_dualgraph.json       # Pennsylvania graph used by RustReCom and scoring
+│   └── pa_dualgraph.json       # Pennsylvania graph used by RustReCom and scoring examples
 ├── data/
-│   ├── pa_gdf.parquet          # Pennsylvania geometry used by scoring and figures
+│   ├── pa_gdf.parquet          # Pennsylvania geometry used by scoring and figure examples
 │   └── alt_plan_pa.json        # one alternate assignment used by a comparison map
+├── notebooks/
+│   └── gerrychain_cut_edges_walkthrough.ipynb
 ├── pipeline_scripts/
-│   ├── example_cli.py          # GerryChain RecordedChain CLI
-│   ├── pa_example_script_vanilla.*
-│   ├── pa_example_script_opt.*
-│   ├── rustrecom_objectives/   # example objective JSON files
+│   ├── run_parallel_chains.py  # bounded cross-platform chain runner
+│   ├── chain_runners/          # GerryChain and direct RustReCom reference examples
 │   ├── metrics/                # GerryTools evaluation
 │   └── figure_generators/      # maps and ensemble plots
-├── batch_example_python_cli_simple.*
-├── batch_example_python_cli_parallel.*
 ├── chain_outputs/              # BENDL recordings
-├── chain_logs/                 # redirected batch output
-├── stats/                      # EvaluationRun data
+├── chain_logs/                 # redirected batch output (where to find error messages)
+├── stats/                      # EnsembleEvalResult data (parquet files)
 └── figures/                    # generated PNG files
 ```
 
-Projects created by the Bash installer contain `.sh` helpers. Projects created by the PowerShell
-installer contain equivalent `.ps1` helpers. All Python scripts are cross-platform.
+Projects created by the Bash installer contain the direct `.sh` RustReCom examples. Projects
+created by the PowerShell installer contain equivalent `.ps1` examples. The primary Python
+workflow is identical on every platform.
 
 ## Choose a chain workflow
 
-The project provides two chain-generation routes:
+The project provides three chain-generation modes through `run_chains.py`:
 
-1. `rustrecom chain` is the quickest route for high-throughput ordinary ReCom ensembles.
-2. `pipeline_scripts/example_cli.py` records a GerryChain ReCom chain from Python. Use this route
-   when the Python API is more important than RustReCom's speed.
+1. `ENGINE = "gerrychain"` records the Python GerryChain example. Use this route when you want to
+   modify the proposal, constraints, acceptance rule, or updaters.
+2. `ENGINE = "rustrecom-chain"` launches high-throughput ordinary RustReCom chains while keeping
+   experiment configuration and parallelization in Python.
+3. `ENGINE = "rustrecom-tilted"` launches objective-guided RustReCom searches from the same Python
+   settings file.
 
 RustReCom also provides two objective-guided search commands:
 
@@ -113,6 +124,10 @@ RustReCom also provides two objective-guided search commands:
 
 An objective-guided run is not a neutral ensemble sample. It is a search for plans that score well
 under the selected objective.
+
+The shell and PowerShell files in `pipeline_scripts/chain_runners/` intentionally expose the raw
+RustReCom CLI. They are direct command references; `run_chains.py` adds Python-based seed lists,
+concurrency, logs, and failure handling around the same commands.
 
 ## Preparing a dual graph
 
@@ -128,7 +143,7 @@ Compactness objectives may also require node area, node boundary perimeter, and 
 perimeter attributes. Column names are case-sensitive. The starting assignment must define a
 contiguous plan, and the graph must support population-balanced recombinations.
 
-Inspect the available columns before adapting a script:
+The available graph columns can be inspected with:
 
 ```bash
 uv run python - <<'PY'
@@ -149,8 +164,9 @@ In PowerShell, put the Python portion in a temporary `.py` file and run it with 
 
 ## RustReCom ordinary chains
 
-The complete Pennsylvania examples are `pipeline_scripts/pa_example_script_vanilla.sh` and
-`pipeline_scripts/pa_example_script_vanilla.ps1`. Their central command is:
+The complete Pennsylvania examples are
+`pipeline_scripts/chain_runners/pa_example_script_vanilla.sh` and its PowerShell counterpart.
+Their central command is:
 
 ```bash
 rustrecom chain \
@@ -167,12 +183,22 @@ rustrecom chain \
     --show-progress
 ```
 
+`rustrecom` names the executable and `chain` selects ordinary ReCom sampling. Everything after the
+subcommand is an option-value pair or a switch. The backslashes only continue a Bash command onto
+the next line; the PowerShell reference uses backticks for the same purpose. Option order does not
+change the run.
+
+One call produces one independently seeded chain and one output file. The reference scripts loop
+over two seeds to demonstrate reproducible independent runs. `run_chains.py` manages seed lists,
+concurrency, logs, and failures in Python.
+
 ### Core chain options
 
-- `--graph-json` points to the NetworkX JSON dual graph.
+- `--graph-json` points to a NetworkX adjacency-data JSON dual graph. RustReCom does not accept
+  node-link JSON.
 - `--assignment-col` names the node attribute containing the starting district labels.
 - `--pop-col` names the node population attribute used to balance districts.
-- `--n-steps` is the number of proposals to generate. Runtime and output size grow with it.
+- `--n-steps` is the requested chain length. Runtime and output size grow with it.
 - `--tol` is the allowed fractional deviation from target district population. A value of `0.01`
   means one percent.
 - `--rng-seed` controls the pseudorandom proposal stream. Use a different seed for each independent
@@ -184,8 +210,6 @@ rustrecom chain \
 - `--show-progress` displays progress without changing the recording.
 - `--sample-interval K` records the seed and every Kth chain position, reducing output size without
   reducing the work performed by the chain.
-- `--n-threads` and `--batch-size` control RustReCom's internal parallel proposal generation. Start
-  with their defaults and benchmark before changing them.
 
 Run `rustrecom chain --help` for the complete option list and the installed version's defaults.
 
@@ -193,17 +217,16 @@ Run `rustrecom chain --help` for the complete option list and the installed vers
 
 The four common variants combine two district-pair rules with two spanning-tree rules:
 
-| Variant | District pair | Spanning tree |
-| --- | --- | --- |
-| `cut-edges-mst` | Select through a cut edge | Minimum spanning tree |
+| Variant              | District pair                    | Spanning tree         |
+| -------------------- | -------------------------------- | --------------------- |
+| `cut-edges-mst`      | Select through a cut edge        | Minimum spanning tree |
 | `district-pairs-mst` | Select an adjacent district pair | Minimum spanning tree |
-| `cut-edges-ust` | Select through a cut edge | Uniform spanning tree |
+| `cut-edges-ust`      | Select through a cut edge        | Uniform spanning tree |
 | `district-pairs-ust` | Select an adjacent district pair | Uniform spanning tree |
 
-The ordinary `chain` command also exposes region-aware and reversible variants. Their assumptions
-and tuning differ from the four examples above, so consult `rustrecom chain --help` before using
-them. Do not compare ensembles produced by different variants as though only the runtime changed;
-the proposal distribution changed too.
+The ordinary `chain` command also exposes region-aware and reversible variants, documented by
+`rustrecom chain --help`. Their assumptions and tuning differ from the four examples above. A
+variant changes the proposal distribution, not merely the runtime.
 
 ### Constraints and additional columns
 
@@ -218,8 +241,8 @@ RustReCom can load additional settings from the command line or a versioned JSON
 - `--config` accepts a JSON string, a JSON file path, or `-` for standard input. Its fields mirror
   the command-line arguments.
 
-Prefer a checked-in JSON file when a run needs many non-default settings. Keep that config with the
-results so the run can be reconstructed.
+A versioned JSON file can record many non-default settings alongside the results needed to
+reconstruct a run.
 
 ## BENDL recordings
 
@@ -229,15 +252,13 @@ BENDL is the default format in this project because one file carries:
 - the dual graph used by the run; and
 - metadata such as population column, tolerance, seed, variant, and step count.
 
-Use `binary_ensemble.BendlDecoder` to inspect a recording. binary-ensemble 2.0 is a Python package;
-it does not install a `ben` shell command.
+Use `binary_ensemble.BendlDecoder` to inspect a recording
 
 ```python
 from binary_ensemble import BendlDecoder
 
 recording = BendlDecoder("chain_outputs/VANILLA_PA__STEPS_1000__RNGSEED_42__TOL_0p01.bendl")
 
-recording.verify()             # Raises if the bundle or stream is corrupt.
 print(recording.count_samples())
 print(recording.read_metadata())
 
@@ -246,20 +267,16 @@ first_assignment = recording.lookup(0)
 ```
 
 Other useful methods include `list_assets()`, `subsample_every()`, `subsample_range()`, and
-`extract_stream()`. An assignment returned by `lookup()` uses the recording's node order. Prefer
-the included GerryTools streaming evaluator when scoring a full recording rather than manually
-materializing every assignment in memory.
+`extract_stream()`. An assignment returned by `lookup()` uses the recording's node order.
 
 ## RustReCom optimization objectives
 
 An objective converts a districting plan into a numeric score. `rustrecom tilted` uses that score
-to favor some valid ReCom proposals over others. Population balance, contiguity, and other
-constraints still determine which proposals are valid; the objective only changes the search
-preference among proposals. Optimization therefore biases the search rather than guaranteeing a
-particular result. Run multiple seeds when exploring an objective.
+to favor some valid ReCom proposals over others.
 
-The Pennsylvania-ready objective files are in `pipeline_scripts/rustrecom_objectives/`. Pass one
-to `rustrecom tilted` with `--objective`:
+The Pennsylvania-ready objective files are in
+`pipeline_scripts/chain_runners/rustrecom_objectives/`. Pass one to `rustrecom tilted` with
+`--objective`:
 
 ```bash
 rustrecom tilted \
@@ -269,7 +286,7 @@ rustrecom tilted \
     --n-steps 1000 \
     --tol 0.01 \
     --rng-seed 42 \
-    --objective pipeline_scripts/rustrecom_objectives/gingles_partial.json \
+    --objective pipeline_scripts/chain_runners/rustrecom_objectives/gingles_partial.json \
     --maximize true \
     --variant district-pairs-mst \
     --writer bendl \
@@ -279,35 +296,33 @@ rustrecom tilted \
     --show-progress
 ```
 
-`pipeline_scripts/pa_example_script_opt.sh` or its PowerShell counterpart contains a complete
-two-seed example. `--objective` also accepts inline JSON, but a file is easier to inspect, reuse,
-and preserve with the results.
+`pipeline_scripts/chain_runners/pa_example_script_opt.sh` or its PowerShell counterpart contains a
+complete two-seed example. `--objective` also accepts inline JSON, but a file is easier to inspect,
+reuse, and preserve with the results.
 
 ### Tilted acceptance
 
-For each valid proposal, RustReCom evaluates the current and proposed plan scores. A score
-improvement is accepted. A worse score may still be accepted so the search can leave local optima.
-The direction and worse-plan behavior are controlled by these options:
+For each valid proposal, RustReCom compares the current and proposed plan scores. Score
+improvements are accepted. The selected acceptance rule determines the probability of accepting a
+worse score, which allows the search to move away from local optima. The direction and worse-plan
+behavior are controlled by these options:
 
 - `--maximize true`: Higher scores are improvements. Use this for all supplied examples except
   target deviation.
 - `--maximize false`: Lower scores are improvements. Use this for
   `minimize_bvap_target_deviation.json`.
-- `--accept-rule linear`: Accept a worse plan with probability
-  `max(0, 1 - beta * score_loss)`. This is the default.
-- `--accept-rule exponential`: Accept a worse plan with probability
-  `exp(-beta * score_loss)`.
-- `--accept-rule fixed`: Accept any worse plan with the probability from `--accept-worse-prob`.
+
+- Acceptance rules `--accept-rule <RULE>`:
+  - `fixed`: Accept any worse plan with the probability from `--accept-worse-prob`.
+  - `linear`: Accept a worse plan with probability `max(0, 1 - beta * score_loss)`.
+  - `exponential`: Accept a worse plan with probability `exp(-beta * score_loss)`.
+
 - `--acceptance-beta`: Control how strongly `linear` or `exponential` rejects worse scores. Larger
   values make the search greedier. The default is `1.0`.
 - `--accept-worse-prob`: Set the probability from `0` to `1` used only by the fixed rule. `0` is
   hill climbing; `1` accepts every valid proposal.
 - `--scores-output-file`: Write objective scores and per-district scores to CSV.
 - `--write-improved-scores-only`: Write only new global-best rows to the score CSV.
-
-The useful acceptance strength depends on the scale of the objective. A beta that is gentle for
-one score may be nearly deterministic for another. Compare acceptance behavior across several
-values and seeds instead of treating the default as a universal calibration.
 
 ### Short bursts
 
@@ -324,24 +339,21 @@ rustrecom short-bursts \
     --burst-length 10 \
     --tol 0.01 \
     --rng-seed 42 \
-    --objective pipeline_scripts/rustrecom_objectives/gingles_partial.json \
+    --objective pipeline_scripts/chain_runners/rustrecom_objectives/gingles_partial.json \
     --maximize true \
     --variant district-pairs-mst \
     --writer bendl \
     --output-file chain_outputs/gingles_short_bursts.bendl \
+    --scores-output-file chain_outputs/gingles_short_bursts_scores.csv \
     --overwrite-output \
     --show-progress
 ```
-
-Short bursts returns full partitions from its workers. Prefer `assignments`, `canonical`, `ben`, or
-`bendl` output; proposal-level writers cannot report the same proposal details for these workers.
-Run `rustrecom short-bursts --help` for the exact behavior of the installed version.
 
 ### Objective JSON settings
 
 Every objective file contains an `objective` field selecting the scoring function. Other fields
 set numeric targets or name attributes in the dual graph. Attribute names are case-sensitive.
-Population and election columns used by these objectives must contain integer-valued data on every
+Population and election columns used by these objectives must contain non-null data on every
 node unless the command explicitly treats a column as partial.
 
 The supplied files use columns from `JSON_dualgraphs/pa_dualgraph.json`. When adapting an objective
@@ -432,7 +444,8 @@ File: `minimize_bvap_target_deviation.json`. Use `--maximize false`.
 
 This objective calculates a population-of-interest share for every district, then matches the
 requested targets to distinct districts. Its score is the smallest possible sum of absolute
-differences between matched district shares and targets. Lower is better.
+differences between matched district shares and targets (note: this is NOT $L^1$ unless a score
+for every district is provided). Lower is better.
 
 The supplied `[0.5, 0.5]` target asks for two distinct districts whose BVAP shares are as close as
 possible to 50%.
@@ -450,57 +463,107 @@ possible to 50%.
 
 ## GerryChain recording workflow
 
-`pipeline_scripts/example_cli.py` shows the current GerryChain and GerryTools recording pattern:
+`pipeline_scripts/chain_runners/example_cli.py` shows the current GerryChain and GerryTools
+recording pattern:
 
 1. load a `gerrychain.Graph`;
 2. construct a `gerrytools.ben.RecordedChain`;
 3. assign its initial `Partition`, including the population updater;
-4. set its ReCom proposal function; and
+4. select one of GerryChain 1.0's four standard `ReCom` proposal variants; and
 5. iterate the chain to write a BENDL recording.
 
-See all CLI options with:
+Select this implementation through the editable Python settings in `run_chains.py`:
 
-```bash
-uv run pipeline_scripts/example_cli.py --help
+```python
+ENGINE = "gerrychain"
+GRAPH_PATH = PROJECT_ROOT / "JSON_dualgraphs" / "pa_dualgraph.json"
+STARTING_PLAN = "seed_plan"
+POPULATION_COLUMN = "total_pop_20"
+RNG_SEEDS = (42,)
+TOTAL_STEPS = 100
 ```
 
-A small Pennsylvania run is:
-
-```bash
-uv run pipeline_scripts/example_cli.py \
-    --graph-path JSON_dualgraphs/pa_dualgraph.json \
-    --output-path chain_outputs/PA_chain_100_steps_seed42.bendl \
-    --starting-plan seed_plan \
-    --pop-col total_pop_20 \
-    --rng-seed 42 \
-    --population-tolerance 0.01 \
-    --total-steps 100
-```
-
-`--starting-plan` is a node attribute name, not a path to an assignment file. The CLI converts its
-labels to BENDL-compatible integer district IDs. Existing integer-like labels retain their integer
-values; other hashable labels receive stable IDs based on graph iteration order.
+`STARTING_PLAN` is a node attribute name, not a path to an assignment file. The GerryChain
+implementation converts its labels to BENDL-compatible integer district IDs. Existing
+integer-like labels retain their integer values; other hashable labels receive stable IDs based on
+graph iteration order.
 
 The `RecordedChain` metadata stores the starting-plan column, population column, tolerance, and
-seed. Add your own constraints, updaters, and acceptance rule in `example_cli.py` when adapting the
+seed. The `--recom-variant` choices match the four common variants in the table above. Add your own
+constraints, updaters, and acceptance rule in `chain_runners/example_cli.py` when adapting the
 workflow.
 
-### Sequential and parallel batches
+The two MST variants also accept region-column surcharges. For example,
+`--region-weights '{"county_id": 1.0}'` makes spanning-tree edges that cross a `county_id` boundary
+more expensive. Every named column must exist on the graph nodes. UST variants do not use region
+weights.
 
-`batch_example_python_cli_simple` runs several seeds sequentially. It contains a small
-Gerrymandria batch followed by a larger Pennsylvania run. Reduce both step-count settings when
-testing.
+### Python batch configuration
 
-`batch_example_python_cli_parallel` runs independent Gerrymandria seeds concurrently and writes a
-separate log for each seed. Its default concurrency is the detected processor count. On a shared
-machine, lower `MAX_JOBS` in Bash or pass `-MaxJobs` in PowerShell:
+`run_chains.py` is the user-facing experiment file. Add a unique integer to `RNG_SEEDS` for every
+independent chain and set `MAX_WORKERS` to the maximum number that may run simultaneously:
 
-```powershell
-.\batch_example_python_cli_parallel.ps1 -MaxJobs 4 -RngSeeds 1,2,3,4 -TotalSteps 100
+```python
+RNG_SEEDS = (42, 43, 44, 45)
+MAX_WORKERS = 2
 ```
 
-Parallelize independent chains, not steps that must belong to one Markov chain. Assign every run a
-different RNG seed and inspect `chain_logs/` if a background job fails.
+The same settings work for GerryChain and both supported RustReCom modes. For an ordinary
+RustReCom ensemble, set:
+
+```python
+ENGINE = "rustrecom-chain"
+OBJECTIVE_FILE = None
+```
+
+For objective-guided search, select the tilted engine and a checked-in objective file:
+
+```python
+ENGINE = "rustrecom-tilted"
+OBJECTIVE_FILE = OBJECTIVES_DIR / "gingles_partial.json"
+MAXIMIZE_OBJECTIVE = True
+```
+
+Each tilted seed writes both a BENDL recording and a `_scores.csv` file. RustReCom remains a
+standalone executable; the Python scheduler starts `rustrecom chain` or `rustrecom tilted` as a
+child process for each seed.
+
+The scheduler shows one aggregate spinner while chains run. Output from GerryChain and RustReCom,
+including their progress indicators, goes to the per-seed files in `chain_logs/` instead of being
+interleaved in the calling terminal.
+
+The scheduler accepts the same `REGION_WEIGHTS` dictionary for GerryChain and both RustReCom modes.
+It forwards the dictionary as GerryChain's region surcharge or RustReCom's region weights, so one
+experiment specification can use either engine. Region weights require an MST variant.
+
+### Output names and experiment tags
+
+`EXPERIMENT_TAG` is the short name of the experiment. Use the same tag for runs that belong to one
+analysis, such as `baseline`, `beta-0p5`, or `county-split-test`. Tags may contain letters, numbers,
+periods, underscores, and hyphens. `run_chains.py` uses the experimenter's current local date.
+
+The scheduler adds `PY_` for GerryChain or `RUST_` for either RustReCom mode, then writes:
+
+```text
+<ENGINE>_<OUTPUT_PREFIX>__STEPS_<steps>__RNGSEED_<seed>__TOL_<tol>__SEEDPLN__<plan_name>__TAG_<tag>__DATE_<date>.bendl
+```
+
+`<plan_name>` is the node attribute named by `STARTING_PLAN`. The log has the identical stem with
+`.log` and records the engine, seed, child output, and exit code. Tilted RustReCom adds
+`_scores.csv` to the stem. For example:
+
+```text
+PY_VANILLA_PA__STEPS_1000__RNGSEED_42__TOL_0p01__SEEDPLN__seed_plan__TAG_baseline__DATE_2026-08-06.bendl
+```
+
+`OUTPUT_PREFIX` supplies `VANILLA_PA`; do not include the automatic `PY_` or `RUST_` prefix.
+
+The runner exits nonzero when any seed fails and reports the corresponding log path.
+
+### Resource budget
+
+`MAX_WORKERS` controls how many independently seeded child processes run at once. CPU, memory, and
+I/O requirements scale with the number of concurrent processes.
 
 ## Scoring a Pennsylvania ensemble
 
@@ -514,18 +577,27 @@ different RNG seed and inspect `chain_logs/` if a background job fails.
 - aggregate Democratic seats across several elections; and
 - election-specific disproportionality.
 
-Run it from anywhere inside the project with:
+Run it from the project root with:
 
 ```bash
-uv run pipeline_scripts/metrics/collect_data_vanilla_pa.py
+uv run pipeline_scripts/metrics/collect_data_vanilla_pa.py --max-workers 1
 ```
 
-The script deliberately processes only files matching `chain_outputs/VANILLA_PA*.bendl`. This
-matches the ordinary RustReCom example. If your recordings use another naming convention, change
-the glob in `main()`. Results are stored under `stats/<recording-name>/` and can be opened with
-`gerrytools.scoring.EvaluationRun`.
+The default `--input-glob 'VANILLA_PA*.bendl'` matches the ordinary RustReCom example.
+`--max-workers` evaluates independent BENDL files in separate processes. Results are stored under
+`stats/<recording-name>/` and can be opened with `gerrytools.scoring.EnsembleEvalResult`.
 
-When adapting the evaluator, keep its graph, geometry, assignment order, and column names aligned.
+Generation and scoring are separate stages. A high-throughput workflow consists of:
+
+1. generate several chains with unique seeds and one output file per seed;
+2. collect the completed recordings and their logs;
+3. score the completed files (this can be done in parallel with `--max-workers`);
+4. open the reusable `EnsembleEvalResult` directories in the plotting scripts.
+
+Evaluation is valid when the graph, geometry, assignment order, and column names describe the same
+geographic units. The evaluator assumes that the graph, assignment vector, and GeoDataFrame use the
+same unit ordering.
+
 The example reads the graph embedded in each BENDL file and uses the matching Pennsylvania
 geometry in `data/pa_gdf.parquet`.
 
@@ -550,16 +622,13 @@ uv run pipeline_scripts/figure_generators/reock_boxplot.py
 These three scripts process directories matching `stats/VANILLA_PA*`. Their images appear under
 `figures/<recording-name>/`. The base-plan maps appear under `figures/plan_maps/`.
 
-A message saying Matplotlib selected the non-GUI `agg` backend is normal in a terminal, remote
-session, or container. The scripts call `save()`, so the PNG path printed afterward is the result.
-
 ## Adapting the project to another state
 
-Work through these changes in order:
+Adapting the project changes these state-specific inputs:
 
-1. Replace the graph and geometry with matching data. Confirm that node identifiers refer to the
-   same geographic units in both.
-2. Choose and validate the starting-plan and population columns.
+1. Replace the graph and geometry with data whose node identifiers describe the same geographic
+   units.
+2. Set the starting-plan and population columns.
 3. Update graph paths, output prefixes, assignment columns, population columns, and tolerances in
    the chain scripts.
 4. Update every column named by an objective JSON file.
@@ -567,22 +636,6 @@ Work through these changes in order:
 6. Update the file globs used by the evaluator and ensemble figure scripts.
 7. Replace Pennsylvania-specific election columns, county masks, projections, labels, and map
    extents in the figure scripts.
-8. Run a very short chain first, verify its BENDL file, score it, and generate every figure before
-   starting full runs.
-
-Do not assume that a column with the same name has the same units or definition in another data
-source. In particular, distinguish total population from voting-age population and document the
-election and demographic vintages used by an analysis.
-
-## Reproducibility and interpretation
-
-- Keep the graph, starting assignment, software versions, seed, population settings, ReCom
-  variant, and objective configuration with the results.
-- Use multiple independent seeds. A single seed describes one pseudorandom trajectory.
-- Do not treat a tilted or short-bursts output as a representative neutral ensemble. Its purpose is
-  optimization under a stated score.
-- Objective values summarize the implemented formula and supplied columns. They do not establish
-  legal compliance, causation, or a unique best plan.
 
 ## Troubleshooting
 
@@ -616,3 +669,8 @@ That is expected when no display is attached. Look for the saved path printed by
 First reproduce the command with a much smaller `--n-steps`. Use `--show-progress`, inspect the
 per-seed log for batch jobs, and check CPU use and available storage. Tight population tolerances
 and the chosen graph or proposal variant can materially affect proposal time.
+
+### A parallel batch reports failed seeds
+
+Open the reported file under `chain_logs/`. The runner preserves each child's complete output and
+returns a failing status instead of silently continuing.

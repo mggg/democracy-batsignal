@@ -1,3 +1,9 @@
+# This is a direct RustReCom CLI reference. Use run_chains.py to coordinate normal batches.
+# `tilted` runs ReCom while favoring proposals that improve the selected objective score.
+# Input and chain flags have the same meaning as in the ordinary `chain` example.
+# `--objective` loads the score definition, and `--maximize true` makes larger scores preferable.
+# The BENDL file records plans; the companion CSV records objective values for analysis.
+
 param(
     [int]$NSteps = 1000,
     [int[]]$RngSeeds = @(42, 43),
@@ -6,12 +12,14 @@ param(
     [string]$PopulationColumn = 'total_pop_20'
 )
 
-$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $GraphJson = Join-Path $ProjectRoot 'JSON_dualgraphs/pa_dualgraph.json'
-$ObjectiveFile = Join-Path $ProjectRoot 'pipeline_scripts/rustrecom_objectives/gingles_partial.json'
+$ObjectiveFile = Join-Path `
+    $ProjectRoot 'pipeline_scripts/chain_runners/rustrecom_objectives/gingles_partial.json'
 $OutputDir = Join-Path $ProjectRoot 'chain_outputs'
-$LogDir = Join-Path $ProjectRoot 'chain_logs'
-$ToleranceLabel = $Tolerance.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+$ToleranceLabel = $Tolerance.ToString(
+    [System.Globalization.CultureInfo]::InvariantCulture
+).Replace('.', 'p')
 
 if (-not (Test-Path -LiteralPath $GraphJson -PathType Leaf))
 {
@@ -19,12 +27,13 @@ if (-not (Test-Path -LiteralPath $GraphJson -PathType Leaf))
     exit 1
 }
 
-New-Item -ItemType Directory -Force -Path $OutputDir, $LogDir | Out-Null
+New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 foreach ($Seed in $RngSeeds)
 {
     $Prefix = "GINGLES_PARTIAL_PA__STEPS_${NSteps}__RNGSEED_${Seed}__TOL_${ToleranceLabel}"
     $OutputFile = Join-Path $OutputDir "${Prefix}.bendl"
+    $ScoresFile = Join-Path $OutputDir "${Prefix}_scores.csv"
 
     Write-Host "Running rustrecom tilted with seed: $Seed ..."
 
@@ -40,6 +49,7 @@ foreach ($Seed in $RngSeeds)
         --variant district-pairs-mst `
         --writer bendl `
         --output-file $OutputFile `
+        --scores-output-file $ScoresFile `
         --overwrite-output `
         --show-progress
 

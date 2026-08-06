@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 from gerrychain import Graph, Partition
 from gerrytools.plotting import ScatterPlot
 from gerrytools.scoring import EnsembleEvalResult, disproportionality
@@ -51,16 +50,16 @@ def create_disprop_scatter(stats_dir: Path) -> Path:
     Returns:
         Path: Location of the saved scatter plot.
 
-    Raises:
-        TypeError: If an election's disproportionality metric is not a pandas Series.
     """
     run = EnsembleEvalResult.open(stats_dir)
 
-    disprop_series: list[pd.Series] = []
+    disprop_series = []
     for election in ELECTIONS:
-        values = run.read(f"{election}_disprop", expand_repetitions=True)
-        if not isinstance(values, pd.Series):
-            raise TypeError(f"{election}_disprop did not produce a Series")
+        values = run.read(
+            f"{election}_disprop",
+            expand_repetitions=True,
+            return_type="series",
+        )
         disprop_series.append(values)
 
     disprop_array = np.array(disprop_series)

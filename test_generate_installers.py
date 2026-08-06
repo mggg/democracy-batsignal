@@ -51,6 +51,34 @@ class InstallerSkeletonTest(unittest.TestCase):
             self.assertIn(path, installer)
             self.assertIn(sha256, installer)
 
+    def test_installers_use_python_ben_and_pinned_rustrecom(self):
+        bash = Path("installer_src/skeleton.sh").read_text()
+        powershell = Path("installer_src/skeleton.ps1").read_text()
+        pyproject = Path("template_project/pyproject.toml").read_text()
+
+        self.assertIn('"binary-ensemble>=2.0"', pyproject)
+        for installer in (bash, powershell):
+            normalized = " ".join(installer.replace("\\\n", " ").replace("`\n", " ").split())
+
+            self.assertIn('--tag "v0.2.0" --locked', normalized)
+            self.assertNotIn("cargo install binary-ensemble", installer)
+            self.assertNotIn("ben-process", installer)
+
+    def test_distributed_sources_do_not_reference_frcw(self):
+        sources = {
+            "README.md": Path("README.md").read_text(),
+            "installer_src/skeleton.sh": Path("installer_src/skeleton.sh").read_text(),
+            "installer_src/skeleton.ps1": Path("installer_src/skeleton.ps1").read_text(),
+            "template_maker.sh": Path("template_maker.sh").read_text(),
+            "template_maker.ps1": Path("template_maker.ps1").read_text(),
+        }
+        for platform in ("bash", "powershell"):
+            for relative_path, content in generate_installers.project_paths(platform)[1]:
+                sources[f"template_project/{relative_path}"] = content
+
+        for source, content in sources.items():
+            self.assertNotIn("frcw", content.lower(), source)
+
     def test_rustrecom_examples_use_cli_arguments(self):
         scripts = (
             Path("template_project/pipeline_scripts/pa_example_script_vanilla.sh"),

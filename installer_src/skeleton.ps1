@@ -6,6 +6,7 @@
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$IsWindowsPlatform = $PSVersionTable.PSEdition -eq 'Desktop' -or $env:OS -eq 'Windows_NT'
 
 
 # =====================================
@@ -92,12 +93,23 @@ function Confirm-Uv
     Write-Info "Installing uv..."
     try
     {
-        # Recommended installer
-        Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+        if ($IsWindowsPlatform)
+        {
+            Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+        } else
+        {
+            if (-not (Test-Command -Name 'curl'))
+            {
+                throw "curl is required to install uv on this platform."
+            }
+            & sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+            Assert-NativeSuccess "uv installation"
+        }
         # Common install path
-        $uvBin = Join-Path $HOME ".local\bin"
+        $uvBin = Join-Path $HOME ".local/bin"
         if (Test-Path $uvBin)
-        { $env:Path = "$uvBin;$env:Path" 
+        {
+            $env:PATH = "$uvBin$([IO.Path]::PathSeparator)$env:PATH"
         }
     } catch
     {
@@ -213,9 +225,9 @@ function Confirm-BuildTools
         foreach ($bin in $binCandidates)
         {
             $escaped = [regex]::Escape($bin)
-            if ($env:Path -notmatch "(^|;)$escaped(;|$)")
+            if ($env:PATH -notmatch "(^|;)$escaped(;|$)")
             {
-                $env:Path = "$bin;$env:Path"
+                $env:PATH = "$bin$([IO.Path]::PathSeparator)$env:PATH"
             }
         }
     }
@@ -285,9 +297,10 @@ function Confirm-Cargo
 {
     if (Test-Command -Name 'cargo')
     {
-        $cargoBin = Join-Path $HOME ".cargo\bin"
+        $cargoBin = Join-Path $HOME ".cargo/bin"
         if (Test-Path $cargoBin)
-        { $env:Path = "$cargoBin;$env:Path" 
+        {
+            $env:PATH = "$cargoBin$([IO.Path]::PathSeparator)$env:PATH"
         }
         return
     }
@@ -300,7 +313,15 @@ function Confirm-Cargo
     Write-Info "Installing Rust/Cargo (rustup)..."
     try
     {
-        if (Test-Command -Name 'winget')
+        if (-not $IsWindowsPlatform)
+        {
+            if (-not (Test-Command -Name 'curl'))
+            {
+                throw "curl is required to install Rust on this platform."
+            }
+            & sh -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'
+            Assert-NativeSuccess "Rust installation"
+        } elseif (Test-Command -Name 'winget')
         {
             winget install Rustlang.Rustup -e --accept-source-agreements --accept-package-agreements
         } else
@@ -309,9 +330,10 @@ function Confirm-Cargo
             Invoke-WebRequest "https://win.rustup.rs/x86_64" -OutFile $tmp
             & $tmp -y
         }
-        $cargoBin = Join-Path $HOME ".cargo\bin"
+        $cargoBin = Join-Path $HOME ".cargo/bin"
         if (Test-Path $cargoBin)
-        { $env:Path = "$cargoBin;$env:Path" 
+        {
+            $env:PATH = "$cargoBin$([IO.Path]::PathSeparator)$env:PATH"
         }
     } catch
     {
@@ -372,7 +394,10 @@ function Main
     $useRustReCom = Read-Host "Would you like to use RustReCom in this project? (y/[n])"
     if ($useRustReCom -match '^(y|Y)$')
     {
-        Confirm-BuildTools
+        if ($IsWindowsPlatform)
+        {
+            Confirm-BuildTools
+        }
         Confirm-Cargo
         Write-Info "Installing RustReCom (rustrecom, version 0.2.0)..."
         & cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --locked --force
@@ -402,11 +427,14 @@ function Main
     Write-Info "Writing project files..."
     Write-PayloadFiles
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-    [IO.File]::WriteAllText(".python-version", "$pythonVersion`n", $utf8NoBom)
-    $pyproject = [IO.File]::ReadAllText("pyproject.toml")
+    $projectPath = (Get-Location).Path
+    $pythonVersionPath = Join-Path $projectPath ".python-version"
+    $pyprojectPath = Join-Path $projectPath "pyproject.toml"
+    [IO.File]::WriteAllText($pythonVersionPath, "$pythonVersion`n", $utf8NoBom)
+    $pyproject = [IO.File]::ReadAllText($pyprojectPath)
     $pyproject = $pyproject -replace '(?m)^requires-python = .+$', `
         "requires-python = `">=$pythonVersion`""
-    [IO.File]::WriteAllText("pyproject.toml", $pyproject, $utf8NoBom)
+    [IO.File]::WriteAllText($pyprojectPath, $pyproject, $utf8NoBom)
 
     Write-Info "Installing the project environment with uv ($pythonVersion)..."
     & uv sync --python $pythonVersion

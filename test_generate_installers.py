@@ -75,6 +75,17 @@ class InstallerSkeletonTest(unittest.TestCase):
             self.assertNotIn("cargo install binary-ensemble", installer)
             self.assertNotIn("ben-process", installer)
 
+    def test_powershell_uv_bootstrap_supports_windows_and_unix(self):
+        powershell = Path("installer_src/skeleton.ps1").read_text()
+
+        self.assertIn("https://astral.sh/uv/install.ps1", powershell)
+        self.assertIn("https://astral.sh/uv/install.sh", powershell)
+        self.assertIn("$IsWindowsPlatform", powershell)
+        self.assertIn("[IO.Path]::PathSeparator", powershell)
+        self.assertNotIn("$env:Path", powershell)
+        self.assertIn('$pyprojectPath = Join-Path $projectPath "pyproject.toml"', powershell)
+        self.assertIn("https://sh.rustup.rs", powershell)
+
     def test_distributed_sources_do_not_reference_frcw(self):
         sources = {
             "README.md": Path("README.md").read_text(),

@@ -15,3 +15,4 @@ data/*
 !chain_outputs/.gitkeep
 !figures/.gitkeep
 !stats/.gitkeep
+!data/alt_plan_pa.json

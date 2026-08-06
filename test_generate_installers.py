@@ -24,6 +24,7 @@ class ProjectPathsTest(unittest.TestCase):
         self.assertNotIn(".venv", bash_directories)
         self.assertFalse(any("__pycache__" in path for path in bash_paths | ps_paths))
         self.assertFalse(any(path.startswith("chain_outputs/") for path in bash_paths | ps_paths))
+        self.assertIn("data/alt_plan_pa.json", bash_paths & ps_paths)
 
 
 class InstallerSkeletonTest(unittest.TestCase):

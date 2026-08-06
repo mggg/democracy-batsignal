@@ -76,7 +76,7 @@ function check_cargo_installed() {
         if [[ "$choice" == "y" || "$choice" == "Y" ]]; then
             case "$OSTYPE" in
                 linux* | darwin*)
-                    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+                    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
                     ;;
                 *)
                     echo "Cannot install directly from script on this OS."

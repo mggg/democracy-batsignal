@@ -1,0 +1,6 @@
+*
+!.dockerignore
+!Dockerfile
+!democracy-batsignal.ps1
+!democracy-batsignal.sh
+!test_generated_projects.sh

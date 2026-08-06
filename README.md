@@ -97,3 +97,18 @@ python3 generate_installers.py --check  # verify they are up to date (useful in 
 The generator embeds UTF-8 project files, preserves directories represented by `.gitkeep`,
 and skips `uv.lock` plus local environment/cache directories such as `.venv` and
 `__pycache__`. Each installer resolves dependencies after applying the user's Python choice.
+
+## Container smoke test
+
+Run the generated installers and every example workflow in a disposable Ubuntu/PowerShell
+container with:
+
+```bash
+./test_generated_projects.sh
+```
+
+The Docker build runs each installer in its own clean stage, including separate uv, Rust, and
+RustReCom bootstraps, then caches those expensive setup layers. The container run reduces the
+example chains to two steps, runs every Bash and PowerShell helper, evaluates a PA chain, generates
+every figure, and checks the expected artifacts. Repeated runs reuse Docker's build cache until an
+installer changes.

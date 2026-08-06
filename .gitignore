@@ -4,9 +4,12 @@
 dev_files
 
 !.gitignore
+!.dockerignore
+!Dockerfile
 !democracy-batsignal.ps1
 !democracy-batsignal.sh
 !README.md
+!test_generated_projects.sh
 
 !template_project/
 !template_project/**

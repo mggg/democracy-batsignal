@@ -86,6 +86,11 @@ class InstallerSkeletonTest(unittest.TestCase):
         self.assertIn('$pyprojectPath = Join-Path $projectPath "pyproject.toml"', powershell)
         self.assertIn("https://sh.rustup.rs", powershell)
 
+    def test_bash_rustup_bootstrap_is_noninteractive(self):
+        bash = Path("installer_src/skeleton.sh").read_text()
+
+        self.assertIn("https://sh.rustup.rs | sh -s -- -y", bash)
+
     def test_distributed_sources_do_not_reference_frcw(self):
         sources = {
             "README.md": Path("README.md").read_text(),

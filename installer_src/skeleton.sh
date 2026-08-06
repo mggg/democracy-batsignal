@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # This installer is assembled from installer_src/skeleton.sh and template_project/.
 # Run 'python3 generate_installers.py' after editing either source. Do not edit the
-# generated template_maker.sh directly.
+# generated democracy-batsignal.sh directly.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail

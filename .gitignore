@@ -4,8 +4,8 @@
 dev_files
 
 !.gitignore
-!template_maker.ps1
-!template_maker.sh
+!democracy-batsignal.ps1
+!democracy-batsignal.sh
 !README.md
 
 !template_project/

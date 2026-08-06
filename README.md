@@ -11,13 +11,13 @@ stage of the pipeline: running chains, compressing ensembles, and computing scor
 On macOS or Linux:
 
 ```bash
-./template_maker.sh
+./democracy-batsignal.sh
 ```
 
 On Windows (PowerShell 5.1 or later):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\template_maker.ps1
+powershell -ExecutionPolicy Bypass -File .\democracy-batsignal.ps1
 ```
 
 The script asks for a project name, whether to install RustReCom, and a Python version. BEN and
@@ -26,8 +26,9 @@ It offers to install anything that is missing (uv, Rust/cargo, and on Windows th
 then creates the project folder next to wherever you ran it from.
 
 Both installers are fully self-contained single files. You do not need to clone this repo; copying
-just `template_maker.sh` or `template_maker.ps1` onto a machine is enough. The only network access
-needed is for installing the tools themselves and downloading the PA example geometry.
+just `democracy-batsignal.sh` or `democracy-batsignal.ps1` onto a machine is enough. The only
+network access needed is for installing the tools themselves and downloading the PA example
+geometry.
 
 ## What you get
 
@@ -37,8 +38,7 @@ my_project/
 ├── JSON_dualgraphs/          # dual graphs: gerrymandria.json and pa_dualgraph.json examples
 ├── pipeline_scripts/
 │   ├── example_cli.py        # click CLI that records a GerryChain ReCom chain as BENDL
-│   ├── pa_example_script_*.sh # Bash RustReCom examples
-│   ├── rust_example_script.ps1 # PowerShell RustReCom example
+│   ├── pa_example_script_*.*  # paired Bash and PowerShell RustReCom examples
 │   └── metrics/              # per-metric scoring scripts that read a BENDL recording
 ├── batch_example_python_cli_simple.*    # run a few seeded chains one after another
 ├── batch_example_python_cli_parallel.*  # run many seeded chains with a concurrency cap
@@ -56,7 +56,7 @@ identical on every platform.
 
 1. **Run a chain.** Either the Python route (`batch_example_python_cli_simple.*` drives
    `pipeline_scripts/example_cli.py`) or the much faster Rust route
-   (`pipeline_scripts/pa_example_script_vanilla.sh` on Bash or `rust_example_script.ps1` on
+   (`pipeline_scripts/pa_example_script_vanilla.sh` on Bash or the matching `.ps1` script on
    PowerShell drives `rustrecom chain`). Both write `.bendl`
    recordings into `chain_outputs/`; each recording bundles the assignments with its graph and
    run metadata.
@@ -76,7 +76,8 @@ subsampling, and the batch scripts export `PYTHONHASHSEED=0` so GerryChain runs 
 
 ## Repo development
 
-`template_maker.sh` and `template_maker.ps1` are **generated files**; do not edit them directly.
+`democracy-batsignal.sh` and `democracy-batsignal.ps1` are **generated files**; do not edit them
+directly.
 The sources are:
 
 - `template_project/` — a runnable uv project and the source of every generated project.
@@ -89,7 +90,7 @@ The sources are:
 After changing any of those, regenerate the installers with:
 
 ```bash
-python3 generate_installers.py          # rewrite template_maker.sh / template_maker.ps1
+python3 generate_installers.py          # rewrite democracy-batsignal.sh / .ps1
 python3 generate_installers.py --check  # verify they are up to date (useful in CI)
 ```
 

@@ -112,8 +112,8 @@ def generate(skeleton_name, block):
 def main():
     check = "--check" in sys.argv[1:]
     outputs = {
-        "template_maker.sh": generate("skeleton.sh", bash_payload_block()),
-        "template_maker.ps1": generate("skeleton.ps1", ps1_payload_block()),
+        "democracy-batsignal.sh": generate("skeleton.sh", bash_payload_block()),
+        "democracy-batsignal.ps1": generate("skeleton.ps1", ps1_payload_block()),
     }
 
     stale = []

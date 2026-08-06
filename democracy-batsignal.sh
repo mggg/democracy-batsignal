@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 # This installer is assembled from installer_src/skeleton.sh and template_project/.
 # Run 'python3 generate_installers.py' after editing either source. Do not edit the
-# generated template_maker.sh directly.
+# generated democracy-batsignal.sh directly.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -1875,9 +1875,9 @@ rustrecom tilted \
     --maximize true
 ```
 
-`pipeline_scripts/pa_example_script_opt.sh` contains a complete example with output and
-logging. The objective JSON may also be supplied inline, but a file is easier to inspect and
-reuse.
+`pipeline_scripts/pa_example_script_opt.sh` and its `.ps1` counterpart contain complete
+examples with output and logging. The objective JSON may also be supplied inline, but a file
+is easier to inspect and reuse.
 
 ### How tilted acceptance works
 

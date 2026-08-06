@@ -35,9 +35,9 @@ rustrecom tilted \
     --maximize true
 ```
 
-`pipeline_scripts/pa_example_script_opt.sh` contains a complete example with output and
-logging. The objective JSON may also be supplied inline, but a file is easier to inspect and
-reuse.
+`pipeline_scripts/pa_example_script_opt.sh` and its `.ps1` counterpart contain complete
+examples with output and logging. The objective JSON may also be supplied inline, but a file
+is easier to inspect and reuse.
 
 ### How tilted acceptance works
 

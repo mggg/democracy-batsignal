@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------------------
 # This installer is assembled from installer_src/skeleton.ps1 and template_project/.
 # Run 'python3 generate_installers.py' after editing either source. Do not edit the
-# generated template_maker.ps1 directly.
+# generated democracy-batsignal.ps1 directly.
 # ---------------------------------------------------------------------------
 
 Set-StrictMode -Version Latest
@@ -2060,9 +2060,9 @@ rustrecom tilted \
     --maximize true
 ```
 
-`pipeline_scripts/pa_example_script_opt.sh` contains a complete example with output and
-logging. The objective JSON may also be supplied inline, but a file is easier to inspect and
-reuse.
+`pipeline_scripts/pa_example_script_opt.sh` and its `.ps1` counterpart contain complete
+examples with output and logging. The objective JSON may also be supplied inline, but a file
+is easier to inspect and reuse.
 
 ### How tilted acceptance works
 
@@ -12505,43 +12505,108 @@ def main():
 if __name__ == "__main__":
     main()
 '@
-'pipeline_scripts/rust_example_script.ps1' = @'
+'pipeline_scripts/pa_example_script_opt.ps1' = @'
 param(
-  [string]$AssignmentColumn = 'seed_plan',
-  [int]$NSteps = 1000,
-  [int]$RngSeed = 42,
-  [double]$Tolerance = 0.01,
-  [string]$PopulationColumn = 'total_pop_20'
+    [int]$NSteps = 1000,
+    [int[]]$RngSeeds = @(42, 43),
+    [double]$Tolerance = 0.01,
+    [string]$AssignmentColumn = 'seed_plan',
+    [string]$PopulationColumn = 'total_pop_20'
 )
 
-# Project root is the parent of this script's folder
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$GraphJson = Join-Path $ProjectRoot 'JSON_dualgraphs/pa_dualgraph.json'
+$ObjectiveFile = Join-Path $ProjectRoot 'pipeline_scripts/rustrecom_objectives/gingles_partial.json'
+$OutputDir = Join-Path $ProjectRoot 'chain_outputs'
+$LogDir = Join-Path $ProjectRoot 'chain_logs'
+$ToleranceLabel = $Tolerance.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 
-$jsonDir = Join-Path $ProjectRoot 'JSON_dualgraphs'
-$outputDir = Join-Path $ProjectRoot 'chain_outputs'
-
-$graphJson = Join-Path $jsonDir 'pa_dualgraph.json'
-
-if (-not (Test-Path $graphJson)) {
-  Write-Error "Could not find graph JSON at: $graphJson"
-  exit 1
+if (-not (Test-Path -LiteralPath $GraphJson -PathType Leaf))
+{
+    Write-Error "Could not find graph JSON at: $GraphJson"
+    exit 1
 }
 
-New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
-$outputName = "PA__STEPS_${NSteps}__RNGSEED_${RngSeed}__TOL_${Tolerance}.bendl"
-$outputFile = Join-Path $outputDir $outputName
+New-Item -ItemType Directory -Force -Path $OutputDir, $LogDir | Out-Null
 
-& rustrecom chain `
-  --assignment-col $AssignmentColumn `
-  --graph-json $graphJson `
-  --n-steps $NSteps `
-  --pop-col $PopulationColumn `
-  --rng-seed $RngSeed `
-  --tol $Tolerance `
-  --variant district-pairs-mst `
-  --writer bendl `
-  --output-file $outputFile `
-  --overwrite-output
+foreach ($Seed in $RngSeeds)
+{
+    $Prefix = "GINGLES_PARTIAL_PA__STEPS_${NSteps}__RNGSEED_${Seed}__TOL_${ToleranceLabel}"
+    $OutputFile = Join-Path $OutputDir "${Prefix}.bendl"
+
+    Write-Host "Running rustrecom tilted with seed: $Seed ..."
+
+    & rustrecom tilted `
+        --assignment-col $AssignmentColumn `
+        --graph-json $GraphJson `
+        --n-steps $NSteps `
+        --pop-col $PopulationColumn `
+        --rng-seed $Seed `
+        --tol $Tolerance `
+        --objective $ObjectiveFile `
+        --maximize true `
+        --variant district-pairs-mst `
+        --writer bendl `
+        --output-file $OutputFile `
+        --overwrite-output `
+        --show-progress
+
+    if ($LASTEXITCODE -ne 0)
+    {
+        exit $LASTEXITCODE
+    }
+}
+'@
+'pipeline_scripts/pa_example_script_vanilla.ps1' = @'
+param(
+    [int]$NSteps = 100000,
+    [int[]]$RngSeeds = @(42, 43),
+    [double]$Tolerance = 0.01,
+    [string]$AssignmentColumn = 'seed_plan',
+    [string]$PopulationColumn = 'total_pop_20'
+)
+
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$GraphJson = Join-Path $ProjectRoot 'JSON_dualgraphs/pa_dualgraph.json'
+$OutputDir = Join-Path $ProjectRoot 'chain_outputs'
+$LogDir = Join-Path $ProjectRoot 'chain_logs'
+$ToleranceLabel = $Tolerance.ToString(
+    [System.Globalization.CultureInfo]::InvariantCulture
+).Replace('.', 'p')
+
+if (-not (Test-Path -LiteralPath $GraphJson -PathType Leaf))
+{
+    Write-Error "Could not find graph JSON at: $GraphJson"
+    exit 1
+}
+
+New-Item -ItemType Directory -Force -Path $OutputDir, $LogDir | Out-Null
+
+foreach ($Seed in $RngSeeds)
+{
+    $OutputName = "VANILLA_PA__STEPS_${NSteps}__RNGSEED_${Seed}__TOL_${ToleranceLabel}.bendl"
+    $OutputFile = Join-Path $OutputDir $OutputName
+
+    Write-Host "Running rustrecom chain with seed: $Seed ..."
+
+    & rustrecom chain `
+        --assignment-col $AssignmentColumn `
+        --graph-json $GraphJson `
+        --n-steps $NSteps `
+        --pop-col $PopulationColumn `
+        --rng-seed $Seed `
+        --tol $Tolerance `
+        --variant district-pairs-mst `
+        --writer bendl `
+        --output-file $OutputFile `
+        --overwrite-output `
+        --show-progress
+
+    if ($LASTEXITCODE -ne 0)
+    {
+        exit $LASTEXITCODE
+    }
+}
 '@
 'pipeline_scripts/rustrecom_objectives/banded_gingles_partial.json' = @'
 {

@@ -18,6 +18,17 @@ class ProjectPathsTest(unittest.TestCase):
         self.assertFalse(any(path.endswith(".ps1") for path in bash_paths))
         self.assertTrue(any(path.endswith(".ps1") for path in ps_paths))
         self.assertFalse(any(path.endswith(".sh") for path in ps_paths))
+        bash_script_stems = {
+            Path(path).with_suffix("").as_posix()
+            for path in bash_paths
+            if path.endswith(".sh")
+        }
+        ps_script_stems = {
+            Path(path).with_suffix("").as_posix()
+            for path in ps_paths
+            if path.endswith(".ps1")
+        }
+        self.assertEqual(bash_script_stems, ps_script_stems)
         self.assertIn("chain_outputs", bash_directories)
         self.assertEqual(bash_directories, ps_directories)
         self.assertFalse(any(path.endswith(".gitkeep") for path in bash_paths | ps_paths))
@@ -69,8 +80,8 @@ class InstallerSkeletonTest(unittest.TestCase):
             "README.md": Path("README.md").read_text(),
             "installer_src/skeleton.sh": Path("installer_src/skeleton.sh").read_text(),
             "installer_src/skeleton.ps1": Path("installer_src/skeleton.ps1").read_text(),
-            "template_maker.sh": Path("template_maker.sh").read_text(),
-            "template_maker.ps1": Path("template_maker.ps1").read_text(),
+            "democracy-batsignal.sh": Path("democracy-batsignal.sh").read_text(),
+            "democracy-batsignal.ps1": Path("democracy-batsignal.ps1").read_text(),
         }
         for platform in ("bash", "powershell"):
             for relative_path, content in generate_installers.project_paths(platform)[1]:
@@ -82,7 +93,7 @@ class InstallerSkeletonTest(unittest.TestCase):
     def test_rustrecom_examples_use_cli_arguments(self):
         scripts = (
             Path("template_project/pipeline_scripts/pa_example_script_vanilla.sh"),
-            Path("template_project/pipeline_scripts/rust_example_script.ps1"),
+            Path("template_project/pipeline_scripts/pa_example_script_vanilla.ps1"),
         )
         for script in scripts:
             text = script.read_text()
@@ -96,10 +107,15 @@ class InstallerSkeletonTest(unittest.TestCase):
         self.assertIn('--rng-seed "$seed"', bash_text)
 
     def test_rustrecom_opt_example_uses_gingles_partial(self):
-        text = Path("template_project/pipeline_scripts/pa_example_script_opt.sh").read_text()
+        scripts = (
+            Path("template_project/pipeline_scripts/pa_example_script_opt.sh"),
+            Path("template_project/pipeline_scripts/pa_example_script_opt.ps1"),
+        )
+        for script in scripts:
+            text = script.read_text()
 
-        self.assertIn("rustrecom tilted", text)
-        self.assertIn("rustrecom_objectives/gingles_partial.json", text)
+            self.assertIn("rustrecom tilted", text)
+            self.assertIn("rustrecom_objectives/gingles_partial.json", text)
 
         objective_dir = Path("template_project/pipeline_scripts/rustrecom_objectives")
         objectives = {

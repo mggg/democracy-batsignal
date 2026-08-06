@@ -29,11 +29,11 @@ n_steps=100000
 
 for seed in "${rng_seeds[@]}"; do
     uv run "${TOPDIR}/pipeline_scripts/example_cli.py" \
-        --graph-path "${TOPDIR}/JSON_dualgraphs/MN_precincts.geojson" \
-        --output-path "${TOPDIR}/chain_outputs/MN_chain_${n_steps}_steps_seed${seed}.bendl" \
-        --starting-plan "CONGDIST" \
-        --pop-col "TOTPOP" \
+        --graph-path "${TOPDIR}/JSON_dualgraphs/pa_dualgraph.json" \
+        --output-path "${TOPDIR}/chain_outputs/PA_chain_${n_steps}_steps_seed${seed}.bendl" \
+        --starting-plan "seed_plan" \
+        --pop-col "total_pop_20" \
         --rng-seed $seed \
-        --population-tolerance 0.05 \
+        --population-tolerance 0.01 \
         --total-steps $n_steps
 done

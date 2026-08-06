@@ -27,14 +27,14 @@ foreach ($seed in $RngSeeds) {
 }
 
 foreach ($seed in $RngSeeds2) {
-  $outFile = Join-Path (Join-Path $TOPDIR "chain_outputs") ("MN_chain_{0}_steps_seed{1}.bendl" -f $TotalSteps2, $seed)
+  $outFile = Join-Path (Join-Path $TOPDIR "chain_outputs") ("PA_chain_{0}_steps_seed{1}.bendl" -f $TotalSteps2, $seed)
 
   & uv run (Join-Path $TOPDIR (Join-Path "pipeline_scripts" "example_cli.py")) `
-    --graph-path   (Join-Path $TOPDIR (Join-Path "JSON_dualgraphs" "MN_precincts.geojson")) `
+    --graph-path   (Join-Path $TOPDIR (Join-Path "JSON_dualgraphs" "pa_dualgraph.json")) `
     --output-path  $outFile `
-    --starting-plan "CONGDIST" `
-    --pop-col       "TOTPOP" `
+    --starting-plan "seed_plan" `
+    --pop-col       "total_pop_20" `
     --rng-seed      $seed `
-    --population-tolerance 0.05 `
+    --population-tolerance 0.01 `
     --total-steps   $TotalSteps2
 }

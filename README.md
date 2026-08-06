@@ -1,17 +1,18 @@
 # Democracy Batsignal
 
-Sets up a ready-to-run redistricting-analysis project in one step: a [uv](https://docs.astral.sh/uv/)-managed
-Python environment with [GerryChain](https://github.com/mggg/GerryChain) and friends, the Rust chain runner
-[RustReCom](https://github.com/mggg/rustrecom), the
-[BEN](https://pypi.org/project/binary-ensemble/) ensemble-compression tools, and example scripts for every
-stage of the pipeline: running chains, compressing ensembles, and computing scores.
+Sets up a ready-to-run redistricting-analysis project in one step: a
+[uv](https://docs.astral.sh/uv/)-managed Python environment with
+[GerryChain](https://github.com/mggg/GerryChain),
+[GerryTools](https://github.com/mggg/GerryTools), the Rust ReCom chain runner
+[RustReCom](https://github.com/mggg/rustrecom), and example scripts for every stage of the
+pipeline: running chains, computing scores, and creating figures.
 
 ## Quickstart
 
 On macOS or Linux:
 
 ```bash
-./democracy-batsignal.sh
+bash democracy-batsignal.sh
 ```
 
 On Windows (PowerShell 5.1 or later):
@@ -21,9 +22,9 @@ powershell -ExecutionPolicy Bypass -File .\democracy-batsignal.ps1
 ```
 
 The script asks for a project name, whether to install RustReCom, and a Python version. BEN and
-GerryTools are installed in the uv-managed Python environment.
-It offers to install anything that is missing (uv, Rust/cargo, and on Windows the MSVC build tools),
-then creates the project folder next to wherever you ran it from.
+GerryTools are installed in the uv-managed Python environment. It offers to install anything that
+is missing (uv, Rust/cargo, and on Windows the MSVC build tools), then creates the project folder
+next to wherever you ran it from.
 
 Both installers are fully self-contained single files. You do not need to clone this repo; copying
 just `democracy-batsignal.sh` or `democracy-batsignal.ps1` onto a machine is enough. The only

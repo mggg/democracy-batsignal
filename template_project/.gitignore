@@ -16,3 +16,4 @@ data/*
 !figures/.gitkeep
 !stats/.gitkeep
 !data/alt_plan_pa.json
+!data/pa_gdf.parquet

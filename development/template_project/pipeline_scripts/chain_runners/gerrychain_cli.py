@@ -1,7 +1,17 @@
+"""Run one GerryChain recording behind the parallel batch interface.
+
+The batch runner launches each chain as a child process so GerryChain and RustReCom use the
+same scheduling, logging, interruption, and failure-handling code. This CLI is that subprocess
+boundary for GerryChain. It keeps the orchestrator's one-chain command syntax consistent across
+engines; users normally edit ``pipeline_scripts/run_chains.py`` instead.
+"""
+
 import json
 import math
 import sys
 from collections.abc import Hashable
+from numbers import Number
+from operator import eq
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +27,8 @@ RECOM_VARIANTS = {
     "district-pairs-mst": ReCom.district_pairs_mst,
     "district-pairs-ust": ReCom.district_pairs_ust,
 }
+# binary-ensemble 2.0 stores assignment labels as unsigned 16-bit integers.
+MAX_BENDL_DISTRICT_ID = (1 << 16) - 1
 
 
 def node_items(graph: Any) -> list[tuple[Hashable, dict[str, Any]]]:
@@ -47,23 +59,101 @@ def load_graph(graph_path: Path) -> Graph:
 
 
 def integer_assignment(graph: Any, assignment_column: str) -> dict[Hashable, int]:
-    """Return a BENDL-compatible integer assignment from a graph node attribute."""
+    """Return a lossless BENDL-compatible assignment from a graph node attribute.
+
+    Note: This function exists primarily as a protective measure against obviously wrong district
+    labels so that the pipeline will run. In all likelihood, most users will have districts with
+    integer IDs and this function will be unnecessary.
+
+    Integer-like labels retain their values when conversion is one-to-one and the IDs are between
+    0 and 65,535. Other hashable labels receive stable integer IDs based on graph iteration order.
+    BENDL can represent at most 65,536 distinct labels.
+
+    Args:
+        graph: GerryChain or NetworkX graph containing the assignment attribute.
+        assignment_column: Node attribute containing each unit's district label.
+
+    Returns:
+        Integer district labels keyed by graph node.
+
+    Raises:
+        click.ClickException: If a label is missing, non-finite, unhashable, or otherwise invalid.
+    """
+    raw_assignment: dict[Hashable, Any] = {}
     try:
-        raw_assignment: dict[Hashable, Any] = {
-            node: data[assignment_column] for node, data in node_items(graph)
-        }
+        for node, data in node_items(graph):
+            label = data[assignment_column]
+            if label is None:
+                raise click.ClickException(
+                    f"Starting-plan attribute {assignment_column!r} contains a missing label."
+                )
+            # Some missing-value sentinels are not numeric but compare unequal to themselves.
+            # e.g., numpy.nan, pandas.NA, and pd.NA
+            try:
+                self_equal = bool(eq(label, label))
+            except (TypeError, ValueError) as error:
+                raise click.ClickException(
+                    f"Starting-plan attribute {assignment_column!r} contains an invalid label: "
+                    f"{label!r}."
+                ) from error
+            if not self_equal:
+                raise click.ClickException(
+                    f"Starting-plan attribute {assignment_column!r} contains a missing label."
+                )
+            if isinstance(label, Number):
+                try:
+                    finite = math.isfinite(label)
+                except TypeError as error:
+                    raise click.ClickException(
+                        f"Starting-plan attribute {assignment_column!r} contains a non-real "
+                        f"numeric label: {label!r}."
+                    ) from error
+                if not finite:
+                    raise click.ClickException(
+                        f"Starting-plan attribute {assignment_column!r} contains a non-finite "
+                        f"numeric label: {label!r}."
+                    )
+            try:
+                hash(label)
+            except TypeError as error:
+                raise click.ClickException(
+                    f"Starting-plan attribute {assignment_column!r} contains an unhashable label: "
+                    f"{label!r}."
+                ) from error
+            raw_assignment[node] = label
     except KeyError as error:
         raise click.ClickException(
             f"Starting-plan attribute {assignment_column!r} is missing from at least one node."
         ) from error
+
+    distinct_label_count = len(set(raw_assignment.values()))
+    if distinct_label_count > MAX_BENDL_DISTRICT_ID + 1:
+        raise click.ClickException(
+            f"Starting-plan attribute {assignment_column!r} contains {distinct_label_count:,} "
+            f"distinct labels; BENDL supports at most {MAX_BENDL_DISTRICT_ID + 1:,}."
+        )
+
     try:
-        return {node: int(label) for node, label in raw_assignment.items()}
-    except (TypeError, ValueError):
-        label_ids: dict[Hashable, int] = {}
-        return {
-            node: label_ids.setdefault(label, len(label_ids))
+        converted = {node: int(label) for node, label in raw_assignment.items()}
+    except (OverflowError, TypeError, ValueError):
+        converted = None
+
+    if converted is not None:
+        numeric_labels_are_exact = all(
+            not isinstance(label, Number) or label == converted[node]
             for node, label in raw_assignment.items()
-        }
+        )
+        conversion_is_one_to_one = len(set(converted.values())) == distinct_label_count
+        conversion_is_in_range = all(
+            0 <= label <= MAX_BENDL_DISTRICT_ID for label in converted.values()
+        )
+        if numeric_labels_are_exact and conversion_is_one_to_one and conversion_is_in_range:
+            return converted
+
+    label_ids: dict[Any, int] = {}
+    return {
+        node: label_ids.setdefault(label, len(label_ids)) for node, label in raw_assignment.items()
+    }
 
 
 def parse_region_weights(

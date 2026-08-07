@@ -95,14 +95,16 @@ function Confirm-Uv
     {
         if ($IsWindowsPlatform)
         {
-            Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+            Invoke-RestMethod https://astral.sh/uv/install.ps1 |
+                Invoke-Expression 6>$null |
+                Out-Null
         } else
         {
             if (-not (Test-Command -Name 'curl'))
             {
                 throw "curl is required to install uv on this platform."
             }
-            & sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+            & sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh > /dev/null'
             Assert-NativeSuccess "uv installation"
         }
         # Common install path
@@ -382,6 +384,10 @@ function Write-PayloadFiles
 
 function Main
 {
+    if ($IsWindowsPlatform)
+    {
+        Write-Warn "A complete Windows installation can use several GB of disk space."
+    }
     Confirm-Uv
 
     $projectName = Read-Host "Enter the name of the new project to create"
@@ -400,7 +406,13 @@ function Main
         }
         Confirm-Cargo
         Write-Info "Installing RustReCom (rustrecom, version 0.2.0)..."
-        & cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --locked --force
+        # RustReCom 0.2.0 builds compatibility binaries that share an unused helper.
+        & cargo install `
+            --config 'build.rustflags=["-A","dead_code"]' `
+            --git "https://github.com/mggg/rustrecom" `
+            --tag "v0.2.0" `
+            --locked `
+            --force
         Assert-NativeSuccess "RustReCom installation"
         Write-OK "RustReCom installed."
     }
@@ -437,6 +449,8 @@ function Main
     [IO.File]::WriteAllText($pyprojectPath, $pyproject, $utf8NoBom)
 
     Write-Info "Installing the project environment with uv ($pythonVersion)..."
+    & uv venv --python $pythonVersion --prompt $projectName
+    Assert-NativeSuccess "Virtual environment creation"
     & uv sync --python $pythonVersion
     Assert-NativeSuccess "Project environment installation"
 
@@ -463,7 +477,12 @@ function Main
         }
     }
 
-    Write-OK "Your project is ready!"
+    Write-OK "Project '$projectName' is ready!"
+    if ($IsWindowsPlatform)
+    {
+        Write-Warn "To run the included .ps1 files in this session:"
+        Write-Host "  Set-ExecutionPolicy -Scope Process Bypass"
+    }
     Write-Warn "If 'uv' or 'cargo' commands are not recognized in *new* shells, log out/in or ensure these are on PATH:"
     Write-Host "  $HOME\.local\bin"
     Write-Host "  $HOME\.cargo\bin"

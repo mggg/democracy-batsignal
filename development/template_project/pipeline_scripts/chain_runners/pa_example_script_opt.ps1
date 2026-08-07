@@ -1,4 +1,5 @@
-# This is a direct RustReCom CLI reference. Use run_chains.py to coordinate normal batches.
+# This is a direct RustReCom CLI reference. Use pipeline_scripts/run_chains.py for normal batches.
+# If script execution is blocked, run: Set-ExecutionPolicy -Scope Process Bypass
 # `tilted` runs ReCom while favoring proposals that improve the selected objective score.
 # Input and chain flags have the same meaning as in the ordinary `chain` example.
 # `--objective` loads the score definition, and `--maximize true` makes larger scores preferable.
@@ -32,7 +33,7 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 foreach ($Seed in $RngSeeds)
 {
     $Prefix = "GINGLES_PARTIAL_PA__STEPS_${NSteps}__RNGSEED_${Seed}__TOL_${ToleranceLabel}"
-    $OutputFile = Join-Path $OutputDir "${Prefix}.bendl"
+    $BendlFile = Join-Path $OutputDir "${Prefix}.bendl"
     $ScoresFile = Join-Path $OutputDir "${Prefix}_scores.csv"
 
     Write-Host "Running rustrecom tilted with seed: $Seed ..."
@@ -48,7 +49,7 @@ foreach ($Seed in $RngSeeds)
         --maximize true `
         --variant district-pairs-mst `
         --writer bendl `
-        --output-file $OutputFile `
+        --output-file $BendlFile `
         --scores-output-file $ScoresFile `
         --overwrite-output `
         --show-progress

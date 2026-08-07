@@ -1,11 +1,12 @@
-# This is a direct RustReCom CLI reference. Use run_chains.py to coordinate normal batches.
+# This is a direct RustReCom CLI reference. Use pipeline_scripts/run_chains.py for normal batches.
+# If script execution is blocked, run: Set-ExecutionPolicy -Scope Process Bypass
 # `chain` samples ordinary ReCom plans from the assignment stored on each graph node.
 # Input flags identify the adjacency-data graph and its assignment and population columns.
 # Chain flags set the seed, number of steps, population tolerance, and ReCom proposal variant.
 # Output flags record the graph, metadata, and assignment stream together in a BENDL file.
 
 param(
-    [int]$NSteps = 100000,
+    [int]$NSteps = 1000,
     [int[]]$RngSeeds = @(42, 43),
     [double]$Tolerance = 0.01,
     [string]$AssignmentColumn = 'seed_plan',
@@ -30,7 +31,7 @@ New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 foreach ($Seed in $RngSeeds)
 {
     $OutputName = "VANILLA_PA__STEPS_${NSteps}__RNGSEED_${Seed}__TOL_${ToleranceLabel}.bendl"
-    $OutputFile = Join-Path $OutputDir $OutputName
+    $BendlFile = Join-Path $OutputDir $OutputName
 
     Write-Host "Running rustrecom chain with seed: $Seed ..."
 
@@ -43,7 +44,7 @@ foreach ($Seed in $RngSeeds)
         --tol $Tolerance `
         --variant district-pairs-mst `
         --writer bendl `
-        --output-file $OutputFile `
+        --output-file $BendlFile `
         --overwrite-output `
         --show-progress
 

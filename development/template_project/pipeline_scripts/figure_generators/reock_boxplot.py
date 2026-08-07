@@ -10,6 +10,10 @@ from gerrytools.scoring import EnsembleEvalResult, reock
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FIGURES_DIR = ROOT_DIR / "figures"
 
+# Figure settings: edit this block, then run this file with `uv run`.
+STATS_GLOB = "*VANILLA_PA*"
+STARTING_PLAN = "seed_plan"
+
 
 def original_reock() -> pd.Series:
     """Calculates seed-plan Reock scores ordered from least to most compact district.
@@ -20,7 +24,7 @@ def original_reock() -> pd.Series:
     graph = Graph.from_json(str(ROOT_DIR / "JSON_dualgraphs" / "pa_dualgraph.json"))
     gdf = gpd.read_parquet(ROOT_DIR / "data" / "pa_gdf.parquet").to_crs("EPSG:5070")
 
-    partition = Partition(graph, assignment="seed_plan")
+    partition = Partition(graph, assignment=STARTING_PLAN)
 
     vals = reock(partition, geometry=gdf).sort_values().reset_index(drop=True)
     return vals
@@ -65,7 +69,11 @@ def create_reock_boxes(stats_dir: Path) -> Path:
 def main() -> None:
     """Generates a Reock box plot for every vanilla Pennsylvania evaluation run."""
     stats_base_dir = ROOT_DIR / "stats"
-    for stats_dir in stats_base_dir.glob("VANILLA_PA*"):
+    stats_dirs = sorted(stats_base_dir.glob(STATS_GLOB))
+    if not stats_dirs:
+        raise FileNotFoundError(f"No directories in {stats_base_dir} match {STATS_GLOB!r}.")
+
+    for stats_dir in stats_dirs:
         print(f"Processing '{stats_dir.name}' ...")
 
         output_path = create_reock_boxes(stats_dir)

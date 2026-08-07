@@ -1,7 +1,6 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-import click
 import geopandas as gpd
 from binary_ensemble import BendlDecoder
 from gerrytools.scoring import (
@@ -16,6 +15,13 @@ from gerrytools.scoring import (
 )
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
+
+# Analysis settings: edit this block, then run this file with `uv run`.
+INPUT_GLOB = "*VANILLA_PA*.bendl"
+MAX_WORKERS = 1
+BATCH_SIZE = 256
+CHAIN_DIR = ROOT_DIR / "chain_outputs"
+STATS_DIR = ROOT_DIR / "stats"
 
 
 def collect_results(
@@ -89,46 +95,26 @@ def collect_results(
     return output_dir
 
 
-@click.command()
-@click.option(
-    "--input-glob",
-    default="VANILLA_PA*.bendl",
-    show_default=True,
-    help="Filename pattern to select from chain_outputs.",
-)
-@click.option(
-    "--max-workers",
-    type=click.IntRange(min=1),
-    default=1,
-    show_default=True,
-    help="Maximum BENDL files to evaluate at once.",
-)
-@click.option(
-    "--batch-size",
-    type=click.IntRange(min=1),
-    default=256,
-    show_default=True,
-    help="Plans scored together in each GerryTools streaming batch.",
-)
-def main(input_glob: str, max_workers: int, batch_size: int) -> None:
+def main() -> None:
     """Evaluate matching Pennsylvania chains and write reusable metric results."""
-    chain_dir = ROOT_DIR / "chain_outputs"
-    stats_dir = ROOT_DIR / "stats"
-    bendl_files = sorted(chain_dir.glob(input_glob))
-    if not bendl_files:
-        raise click.ClickException(f"No files in {chain_dir} match {input_glob!r}.")
+    if MAX_WORKERS < 1 or BATCH_SIZE < 1:
+        raise ValueError("MAX_WORKERS and BATCH_SIZE must both be at least 1.")
 
-    stats_dir.mkdir(exist_ok=True, parents=True)
-    if max_workers == 1:
+    bendl_files = sorted(CHAIN_DIR.glob(INPUT_GLOB))
+    if not bendl_files:
+        raise FileNotFoundError(f"No files in {CHAIN_DIR} match {INPUT_GLOB!r}.")
+
+    STATS_DIR.mkdir(exist_ok=True, parents=True)
+    if MAX_WORKERS == 1:
         for bendl_file in bendl_files:
-            click.echo(f"Processing {bendl_file.name}...")
-            collect_results(bendl_file, stats_dir, batch_size, show_progress=True)
+            print(f"Processing {bendl_file.name}...")
+            collect_results(bendl_file, STATS_DIR, BATCH_SIZE, show_progress=True)
         return
 
     failures: list[str] = []
-    with ProcessPoolExecutor(max_workers=min(max_workers, len(bendl_files))) as executor:
+    with ProcessPoolExecutor(max_workers=min(MAX_WORKERS, len(bendl_files))) as executor:
         future_files = {
-            executor.submit(collect_results, path, stats_dir, batch_size, False): path
+            executor.submit(collect_results, path, STATS_DIR, BATCH_SIZE, False): path
             for path in bendl_files
         }
         for future in as_completed(future_files):
@@ -138,11 +124,11 @@ def main(input_glob: str, max_workers: int, batch_size: int) -> None:
             except (KeyError, OSError, RuntimeError, TypeError, ValueError) as error:
                 failures.append(f"{bendl_file.name}: {error}")
             else:
-                click.echo(f"Finished {bendl_file.name}: {output_dir}")
+                print(f"Finished {bendl_file.name}: {output_dir}")
 
     if failures:
         details = "\n".join(f"  {failure}" for failure in failures)
-        raise click.ClickException(f"Evaluation failed:\n{details}")
+        raise RuntimeError(f"Evaluation failed:\n{details}")
 
 
 if __name__ == "__main__":

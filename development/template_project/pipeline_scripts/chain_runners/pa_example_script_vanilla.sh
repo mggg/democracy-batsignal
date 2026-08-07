@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# This is a direct RustReCom CLI reference. Use run_chains.py to coordinate normal batches.
+# This is a direct RustReCom CLI reference. Use pipeline_scripts/run_chains.py for normal batches.
 # `chain` samples ordinary ReCom plans from the assignment stored on each graph node.
 # Input flags identify the adjacency-data graph and its assignment and population columns.
 # Chain flags set the seed, number of steps, population tolerance, and ReCom proposal variant.
@@ -11,7 +11,7 @@ set -e
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 PROJECT_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 
-n_steps=100000
+n_steps=1000
 rng_seed=(42 43)
 tol=0.01
 assignment_col="seed_plan"
@@ -28,7 +28,7 @@ fi
 mkdir -p "$output_dir"
 
 for seed in "${rng_seed[@]}"; do
-    output_file="${output_dir}/VANILLA_PA__STEPS_${n_steps}__RNGSEED_${seed}__TOL_${tol/./p}.bendl"
+    bendl_file="${output_dir}/VANILLA_PA__STEPS_${n_steps}__RNGSEED_${seed}__TOL_${tol/./p}.bendl"
 
     echo "Running rustrecom chain with seed: $seed ..."
 
@@ -41,7 +41,7 @@ for seed in "${rng_seed[@]}"; do
         --tol "$tol" \
         --variant district-pairs-mst \
         --writer bendl \
-        --output-file "$output_file" \
+        --output-file "$bendl_file" \
         --overwrite-output \
         --show-progress
 done

@@ -48,7 +48,9 @@ function check_uv_installed() {
                 export XDG_CONFIG_HOME="$tmp_xdg"
                 # Don't let a non-zero exit (e.g., shell integration step) kill our flow
                 set +e
-                curl -LsSf https://astral.sh/uv/install.sh | sh
+                # uv's installer prints a final message that can look like this entire setup is
+                # complete. Keep its errors, then report completion in this installer's context.
+                curl -LsSf https://astral.sh/uv/install.sh | sh > /dev/null
                 true
             )
             rm -rf "$tmp_xdg" 2> /dev/null || true
@@ -159,7 +161,13 @@ function main() {
     if [[ "$use_rustrecom" == "y" || "$use_rustrecom" == "Y" ]]; then
         check_cargo_installed
         echo "Installing RustReCom (rustrecom, version 0.2.0)..."
-        cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --locked --force
+        # RustReCom 0.2.0 builds compatibility binaries that share an unused helper.
+        cargo install \
+            --config 'build.rustflags=["-A","dead_code"]' \
+            --git "https://github.com/mggg/rustrecom" \
+            --tag "v0.2.0" \
+            --locked \
+            --force
         echo "RustReCom has been installed."
     fi
 
@@ -192,6 +200,7 @@ function main() {
     mv pyproject.toml.tmp pyproject.toml
 
     echo "Installing the project environment with uv ($python_version)..."
+    uv venv --python "$python_version" --prompt "$project_name"
     uv sync --python "$python_version"
 
     echo "Downloading PA geometry..."
@@ -214,7 +223,7 @@ function main() {
     fi
     mv "$pa_tmp" "data/pa_gdf.parquet"
 
-    echo "Your project is ready! You may need to restart your shell for uv to work properly."
+    echo "Project '$project_name' is ready! You may need to restart your shell for uv to work properly."
 }
 
 main "$@"

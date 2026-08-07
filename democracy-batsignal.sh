@@ -48,7 +48,9 @@ function check_uv_installed() {
                 export XDG_CONFIG_HOME="$tmp_xdg"
                 # Don't let a non-zero exit (e.g., shell integration step) kill our flow
                 set +e
-                curl -LsSf https://astral.sh/uv/install.sh | sh
+                # uv's installer prints a final message that can look like this entire setup is
+                # complete. Keep its errors, then report completion in this installer's context.
+                curl -LsSf https://astral.sh/uv/install.sh | sh > /dev/null
                 true
             )
             rm -rf "$tmp_xdg" 2> /dev/null || true
@@ -141,7 +143,8 @@ payload_files=(
     "README.md"
     "data/alt_plan_pa.json"
     "notebooks/gerrychain_cut_edges_walkthrough.ipynb"
-    "pipeline_scripts/chain_runners/example_cli.py"
+    "pipeline_scripts/chain_runners/batch_runner.py"
+    "pipeline_scripts/chain_runners/gerrychain_cli.py"
     "pipeline_scripts/chain_runners/pa_example_script_opt.sh"
     "pipeline_scripts/chain_runners/pa_example_script_vanilla.sh"
     "pipeline_scripts/chain_runners/rustrecom_objectives/banded_gingles_partial.json"
@@ -154,9 +157,10 @@ payload_files=(
     "pipeline_scripts/figure_generators/disprop_scatter.py"
     "pipeline_scripts/figure_generators/reock_boxplot.py"
     "pipeline_scripts/metrics/collect_data_vanilla_pa.py"
-    "pipeline_scripts/run_parallel_chains.py"
+    "pipeline_scripts/run_chains.py"
+    "pipeline_scripts/run_data_collection_scripts.py"
+    "pipeline_scripts/run_figure_generation_scripts.py"
     "pyproject.toml"
-    "run_chains.py"
 )
 
 function write_payload() {
@@ -1853,11 +1857,19 @@ uv run python -c "import gerrychain, gerrytools, binary_ensemble; print('ready')
 The same commands work in PowerShell. If the second command prints `ready`, the Python environment
 is usable. `rustrecom --version` reports whether the separate RustReCom executable is available.
 
+Windows PowerShell sessions that run the included `.ps1` references may require:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
+
+The process scope lasts only for the current PowerShell session.
+
 ## 2. Edit one settings block
 
-Open `run_chains.py`. The block headed `Experiment settings` configures the standard batch workflow.
-`settings_for_seed()` translates those settings into one chain configuration, and `main()` submits
-the batch.
+Open `pipeline_scripts/run_chains.py`. The block headed `Experiment settings` configures the
+standard batch workflow. `settings_for_run()` translates those settings into one chain
+configuration, and `main()` submits the batch.
 
 These settings describe the included Pennsylvania example:
 
@@ -1865,48 +1877,57 @@ These settings describe the included Pennsylvania example:
 ENGINE = "gerrychain"
 GRAPH_PATH = PROJECT_ROOT / "JSON_dualgraphs" / "pa_dualgraph.json"
 OUTPUT_PREFIX = "VANILLA_PA"
-STARTING_PLAN = "seed_plan"
+STARTING_PLANS = ("seed_plan",)
 POPULATION_COLUMN = "total_pop_20"
 RNG_SEEDS = (42,)
 TOTAL_STEPS = 100
 POPULATION_TOLERANCE = 0.01
 RECOM_VARIANT = "district-pairs-mst"
 EXPERIMENT_TAG = "quickstart"
-RUN_DATE = date.today().isoformat()
+RUN_DATE = datetime.now().astimezone().date().isoformat()
 MAX_WORKERS = 1
 ```
 
 For your data, change:
 
-| Setting                | Meaning                                                                           |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| `GRAPH_PATH`           | Path to the dual graph. Keep the path inside quotes and join folders with `/`.    |
-| `OUTPUT_PREFIX`        | Short analysis name used in every output filename.                                |
-| `STARTING_PLAN`        | Node column containing the starting district assignment.                          |
-| `POPULATION_COLUMN`    | Node column containing the population used to balance districts.                  |
-| `RNG_SEEDS`            | Reproducible seed for each independent chain. `(42,)` is a one-item Python tuple. |
-| `TOTAL_STEPS`          | Number of recorded chain positions per seed. The example uses `100`.              |
-| `POPULATION_TOLERANCE` | Allowed fractional deviation from ideal population. `0.01` is 1 percent.          |
-| `RECOM_VARIANT`        | District-pair and spanning-tree sampling rule.                                    |
-| `EXPERIMENT_TAG`       | Name of the experiment, such as `"baseline"` or `"county-splits"`.                |
-| `RUN_DATE`             | Date included in filenames. The example evaluates the current local date.         |
-| `MAX_WORKERS`          | Maximum independent chains running at once.                                       |
+| Setting                | Meaning                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| `GRAPH_PATH`           | Path to the dual graph. Keep the path inside quotes and join folders with `/`.         |
+| `OUTPUT_PREFIX`        | Short analysis name used in every output filename.                                     |
+| `STARTING_PLANS`       | Node columns containing starting assignments. One item is written as `("seed_plan",)`. |
+| `POPULATION_COLUMN`    | Node column containing the population used to balance districts.                       |
+| `RNG_SEEDS`            | Reproducible seeds combined with every starting plan. `(42,)` has one item.            |
+| `TOTAL_STEPS`          | Number of recorded positions per plan-and-seed run. The example uses `100`.            |
+| `POPULATION_TOLERANCE` | Allowed fractional deviation from ideal population. `0.01` is 1 percent.               |
+| `RECOM_VARIANT`        | District-pair and spanning-tree sampling rule.                                         |
+| `EXPERIMENT_TAG`       | Name of the experiment, such as `"baseline"` or `"county-splits"`.                     |
+| `RUN_DATE`             | Date included in filenames. The example evaluates the current local date.              |
+| `MAX_WORKERS`          | Maximum independent chains running at once.                                            |
 
 The graph must be NetworkX adjacency-data JSON. Every node needs the starting-plan and population
 columns named above. Objective files and region-aware proposals may require additional columns.
 The full README explains graph preparation and how to inspect available node columns.
+
+Every starting plan is combined with every random seed. For example:
+
+```python
+STARTING_PLANS = ("enacted_plan", "alternate_plan")
+RNG_SEEDS = (42, 43)
+```
+
+This configuration runs four chains. The starting-plan column is included in each output filename.
 
 ## 3. Run the batch
 
 From the project root:
 
 ```bash
-uv run run_chains.py
+uv run pipeline_scripts/run_chains.py
 ```
 
-The runner starts one child process per seed, limits simultaneous chains with `MAX_WORKERS`, and
-writes each child's console output to its own file in `chain_logs/`. It exits unsuccessfully if any
-chain fails and tells you which log to inspect.
+The runner starts one child process per starting-plan and seed combination, limits simultaneous
+chains with `MAX_WORKERS`, and writes each child's console output to its own file in `chain_logs/`.
+It exits unsuccessfully if any chain fails and tells you which log to inspect.
 
 Successful chains produce BENDL recordings in `chain_outputs/`. A filename records the engine,
 step count, random seed, population tolerance, starting-plan column, experiment tag, and date.
@@ -1942,24 +1963,75 @@ optimization searches, not neutral ensemble samples.
 ## 5. Scale
 
 A representative 10,000-step chain provides an estimate of runtime and output size for a particular
-graph, constraint set, and objective. `RNG_SEEDS` and `TOTAL_STEPS` set the batch size;
-`MAX_WORKERS` controls how many independent chains run concurrently. The template does not add
-threads inside an individual chain.
+graph, constraint set, and objective. `STARTING_PLANS` and `RNG_SEEDS` determine the number of runs,
+while `TOTAL_STEPS` sets each run's length. `MAX_WORKERS` controls how many chains run concurrently.
+The template does not add threads inside an individual chain.
 
-Next, use `pipeline_scripts/metrics/collect_data_vanilla_pa.py` as the model for scoring BENDL
-recordings and `pipeline_scripts/figure_generators/` as examples for plots.
+## 6. Collect data
 
-## 6. Modifying the Code for Your Project
+`pipeline_scripts/metrics/collect_data_vanilla_pa.py` evaluates recorded Pennsylvania chains with
+GerryTools. Its settings are at the top of the file:
 
-- `run_chains.py`: Change graph paths, node columns, engines, seeds, and experiment settings.
+```python
+INPUT_GLOB = "*VANILLA_PA*.bendl"
+MAX_WORKERS = 1
+BATCH_SIZE = 256
+```
+
+`INPUT_GLOB` selects BENDL files from `chain_outputs/`. The default matches direct
+`VANILLA_PA...` outputs and all Python-runner outputs whose analysis prefix is `VANILLA_PA`,
+including the `PY_`, `RUST_CHAIN_`, and `RUST_TILTED_` engines. `MAX_WORKERS` controls how many
+recordings are evaluated in separate processes. `BATCH_SIZE` controls how many plans GerryTools
+scores together while streaming a recording.
+
+Run the configured data collection scripts from the project root:
+
+```bash
+uv run pipeline_scripts/run_data_collection_scripts.py
+```
+
+`DATA_COLLECTION_SCRIPTS` at the top of that file lists the collectors to run. The Pennsylvania
+collector shown above is included by default.
+
+The supplied evaluator calculates compactness, cut edges, population totals, seats, and election
+disproportionality. Each recording produces a reusable GerryTools `EnsembleEvalResult` directory
+under `stats/<recording-name>/`.
+
+## 7. Generate figures
+
+Run the configured figure scripts from the project root:
+
+```bash
+uv run pipeline_scripts/run_figure_generation_scripts.py
+```
+
+`FIGURE_GENERATION_SCRIPTS` at the top of that file lists the scripts and their execution order. It
+runs the base-plan maps and the three ensemble figures by default. The ensemble scripts read the
+evaluation directories created in the preceding section.
+
+Each ensemble script has a settings block at the top. `STATS_GLOB` selects directories under
+`stats/`, `STARTING_PLAN` selects the reference assignment, and the remaining constants control
+plot-specific values such as elections, bins, and axis limits. Images are written under
+`figures/plan_maps/` or `figures/<recording-name>/`.
+
+`STARTING_PLAN` is one common reference for every directory selected by `STATS_GLOB`. To compare
+each starting plan separately, narrow `STATS_GLOB`, change `STARTING_PLAN`, and rerun the script.
+
+## 8. Modifying the code for your project
+
+- `pipeline_scripts/run_chains.py`: Change graph paths, node columns, engines, seeds, and experiment
+  settings.
+- `pipeline_scripts/run_data_collection_scripts.py`: Select the data collectors to run.
+- `pipeline_scripts/run_figure_generation_scripts.py`: Select and order the figure scripts.
 - `notebooks/gerrychain_cut_edges_walkthrough.ipynb`: Start here for an interactive GerryChain
   example that runs a chain and plots a result.
-- `pipeline_scripts/chain_runners/example_cli.py`: Change GerryChain proposals, constraints,
+- `pipeline_scripts/chain_runners/gerrychain_cli.py`: Change GerryChain proposals, constraints,
   acceptance rules, updaters, or recording behavior.
 - `pipeline_scripts/chain_runners/rustrecom_objectives/`: Add or modify RustReCom objective JSON.
 - `pipeline_scripts/metrics/`: Change the statistics evaluated for each recorded plan.
 - `pipeline_scripts/figure_generators/`: Change maps and ensemble plots.
-- `pipeline_scripts/run_parallel_chains.py`: Change output naming, logging, or process scheduling.
+- `pipeline_scripts/chain_runners/batch_runner.py`: Change output naming, logging, or process
+  scheduling.
 - `pyproject.toml`: Add Python packages, then run `uv sync`.
 
 Open the notebook from the project root in VS Code, JupyterLab, or another notebook editor and
@@ -1997,12 +2069,13 @@ Use [QUICKSTART.md](QUICKSTART.md) for the shortest path from a dual graph to a 
 ReCom chains. The same Python entry point runs on macOS, Linux, and Windows:
 
 ```bash
-uv run run_chains.py
+uv run pipeline_scripts/run_chains.py
 ```
 
 The included settings run a 100-step Pennsylvania GerryChain example. To use another graph, edit
-the `Experiment settings` block near the top of `run_chains.py`. That selects the engine, graph,
-node columns, seeds, step count, population tolerance, experiment tag, and concurrency.
+the `Experiment settings` block near the top of `pipeline_scripts/run_chains.py`. That selects the
+engine, graph, node columns, seeds, step count, population tolerance, experiment tag, and
+concurrency.
 
 The Democracy Batsignal installer creates and synchronizes the environment. This command reports
 whether the Python packages are importable:
@@ -2020,6 +2093,14 @@ rustrecom --version
 RustReCom is not installed in the uv environment. It is a Rust executable installed through
 Cargo. The GerryChain examples still work if you skipped it.
 
+Windows PowerShell sessions that run the included `.ps1` references may require:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
+
+The process scope lasts only for the current PowerShell session.
+
 If you change `pyproject.toml`, update the environment with:
 
 ```bash
@@ -2030,19 +2111,21 @@ uv sync
 
 Each part of an experiment has one primary customization point:
 
-- `run_chains.py` contains the normal experiment settings: graph, columns, engine, seeds, ReCom
-  variant, objective, and concurrency.
+- `pipeline_scripts/run_chains.py` contains the normal experiment settings: graph, columns, engine,
+  seeds, ReCom variant, objective, and concurrency.
+- `pipeline_scripts/run_data_collection_scripts.py` selects the data collectors to run.
+- `pipeline_scripts/run_figure_generation_scripts.py` selects and orders the figure scripts.
 - `notebooks/gerrychain_cut_edges_walkthrough.ipynb` is an interactive GerryChain example from
   graph loading through a 10,000-step cut-edge histogram.
-- `pipeline_scripts/chain_runners/example_cli.py` contains the GerryChain proposal, partition,
+- `pipeline_scripts/chain_runners/gerrychain_cli.py` contains the GerryChain proposal, partition,
   updaters, and BENDL recording. Modify it for new constraints or acceptance rules.
 - `pipeline_scripts/chain_runners/rustrecom_objectives/` contains RustReCom optimization
   objectives. Copy the closest JSON example and change its columns or score settings.
 - `pipeline_scripts/metrics/` contains ensemble scoring. Add statistics here when the output will
   be reused by multiple figures.
 - `pipeline_scripts/figure_generators/` contains maps and plots.
-- `pipeline_scripts/run_parallel_chains.py` owns process scheduling, log capture, and standardized
-  filenames.
+- `pipeline_scripts/chain_runners/batch_runner.py` owns process scheduling, log capture, and
+  standardized filenames.
 - `pyproject.toml` owns Python dependencies. Run `uv sync` after editing it.
 
 ## Project layout
@@ -2050,7 +2133,6 @@ Each part of an experiment has one primary customization point:
 ```text
 .
 ├── QUICKSTART.md              # ~10-minute guide for adapting the project
-├── run_chains.py              # edit one settings block, then run this file
 ├── JSON_dualgraphs/
 │   ├── gerrymandria.json       # small graph for the Python examples
 │   └── pa_dualgraph.json       # Pennsylvania graph used by RustReCom and scoring examples
@@ -2060,8 +2142,10 @@ Each part of an experiment has one primary customization point:
 ├── notebooks/
 │   └── gerrychain_cut_edges_walkthrough.ipynb
 ├── pipeline_scripts/
-│   ├── run_parallel_chains.py  # bounded cross-platform chain runner
-│   ├── chain_runners/          # GerryChain and direct RustReCom reference examples
+│   ├── run_chains.py            # edit one settings block, then run this file
+│   ├── run_data_collection_scripts.py
+│   ├── run_figure_generation_scripts.py
+│   ├── chain_runners/           # one-chain CLI and the bounded batch runner
 │   ├── metrics/                # GerryTools evaluation
 │   └── figure_generators/      # maps and ensemble plots
 ├── chain_outputs/              # BENDL recordings
@@ -2076,7 +2160,7 @@ workflow is identical on every platform.
 
 ## Choose a chain workflow
 
-The project provides three chain-generation modes through `run_chains.py`:
+The project provides three chain-generation modes through `pipeline_scripts/run_chains.py`:
 
 1. `ENGINE = "gerrychain"` records the Python GerryChain example. Use this route when you want to
    modify the proposal, constraints, acceptance rule, or updaters.
@@ -2094,9 +2178,10 @@ RustReCom also provides two objective-guided search commands:
 An objective-guided run is not a neutral ensemble sample. It is a search for plans that score well
 under the selected objective.
 
-The shell and PowerShell files in `pipeline_scripts/chain_runners/` intentionally expose the raw
-RustReCom CLI. They are direct command references; `run_chains.py` adds Python-based seed lists,
-concurrency, logs, and failure handling around the same commands.
+The Bash project contains `.sh` files in `pipeline_scripts/chain_runners/`; the PowerShell project
+contains the equivalent `.ps1` files. They intentionally expose the raw RustReCom CLI.
+`pipeline_scripts/run_chains.py` adds Python-based plan and seed lists, concurrency, logs, and
+failure handling around the same commands.
 
 ## Preparing a dual graph
 
@@ -2133,9 +2218,10 @@ In PowerShell, put the Python portion in a temporary `.py` file and run it with 
 
 ## RustReCom ordinary chains
 
-The complete Pennsylvania examples are
-`pipeline_scripts/chain_runners/pa_example_script_vanilla.sh` and its PowerShell counterpart.
-Their central command is:
+The complete Pennsylvania example is
+`pipeline_scripts/chain_runners/pa_example_script_vanilla.sh` in a Bash project or
+`pipeline_scripts/chain_runners/pa_example_script_vanilla.ps1` in a PowerShell project. Its central
+command is:
 
 ```bash
 rustrecom chain \
@@ -2158,8 +2244,8 @@ the next line; the PowerShell reference uses backticks for the same purpose. Opt
 change the run.
 
 One call produces one independently seeded chain and one output file. The reference scripts loop
-over two seeds to demonstrate reproducible independent runs. `run_chains.py` manages seed lists,
-concurrency, logs, and failures in Python.
+over two seeds to demonstrate reproducible independent runs. `pipeline_scripts/run_chains.py`
+manages plan-and-seed combinations, concurrency, logs, and failures in Python.
 
 ### Core chain options
 
@@ -2265,9 +2351,9 @@ rustrecom tilted \
     --show-progress
 ```
 
-`pipeline_scripts/chain_runners/pa_example_script_opt.sh` or its PowerShell counterpart contains a
-complete two-seed example. `--objective` also accepts inline JSON, but a file is easier to inspect,
-reuse, and preserve with the results.
+`pipeline_scripts/chain_runners/pa_example_script_opt.sh` in a Bash project or the corresponding
+`.ps1` file in a PowerShell project contains a complete two-seed example. `--objective` also accepts
+inline JSON, but a file is easier to inspect, reuse, and preserve with the results.
 
 ### Tilted acceptance
 
@@ -2432,7 +2518,7 @@ possible to 50%.
 
 ## GerryChain recording workflow
 
-`pipeline_scripts/chain_runners/example_cli.py` shows the current GerryChain and GerryTools
+`pipeline_scripts/chain_runners/gerrychain_cli.py` shows the current GerryChain and GerryTools
 recording pattern:
 
 1. load a `gerrychain.Graph`;
@@ -2441,25 +2527,33 @@ recording pattern:
 4. select one of GerryChain 1.0's four standard `ReCom` proposal variants; and
 5. iterate the chain to write a BENDL recording.
 
-Select this implementation through the editable Python settings in `run_chains.py`:
+The batch runner starts every chain as a child process. This CLI gives GerryChain a stable
+one-chain command, so the batch runner can schedule Python and RustReCom runs without
+changing its process, logging, or failure-handling syntax. Normal experiment settings remain in
+`pipeline_scripts/run_chains.py`.
+
+Select this implementation through the editable Python settings in
+`pipeline_scripts/run_chains.py`:
 
 ```python
 ENGINE = "gerrychain"
 GRAPH_PATH = PROJECT_ROOT / "JSON_dualgraphs" / "pa_dualgraph.json"
-STARTING_PLAN = "seed_plan"
+STARTING_PLANS = ("seed_plan",)
 POPULATION_COLUMN = "total_pop_20"
 RNG_SEEDS = (42,)
 TOTAL_STEPS = 100
 ```
 
-`STARTING_PLAN` is a node attribute name, not a path to an assignment file. The GerryChain
-implementation converts its labels to BENDL-compatible integer district IDs. Existing
-integer-like labels retain their integer values; other hashable labels receive stable IDs based on
-graph iteration order.
+Each item in `STARTING_PLANS` is a node attribute name, not a path to an assignment file. Every
+starting plan is combined with every value in `RNG_SEEDS`. The GerryChain implementation converts
+assignment labels to BENDL-compatible integer district IDs. Integer-like labels retain their values
+when conversion is one-to-one and the IDs are between 0 and 65,535; other hashable labels receive
+stable IDs based on graph iteration order. Missing and non-finite labels are rejected, normalization
+never merges distinct labels, and a BENDL recording can contain at most 65,536 distinct districts.
 
 The `RecordedChain` metadata stores the starting-plan column, population column, tolerance, and
 seed. The `--recom-variant` choices match the four common variants in the table above. Add your own
-constraints, updaters, and acceptance rule in `chain_runners/example_cli.py` when adapting the
+constraints, updaters, and acceptance rule in `chain_runners/gerrychain_cli.py` when adapting the
 workflow.
 
 The two MST variants also accept region-column surcharges. For example,
@@ -2469,10 +2563,11 @@ weights.
 
 ### Python batch configuration
 
-`run_chains.py` is the user-facing experiment file. Add a unique integer to `RNG_SEEDS` for every
-independent chain and set `MAX_WORKERS` to the maximum number that may run simultaneously:
+`pipeline_scripts/run_chains.py` is the user-facing experiment file. Each starting-plan column is
+combined with each random seed. `MAX_WORKERS` sets the maximum number that may run simultaneously:
 
 ```python
+STARTING_PLANS = ("enacted_plan", "alternate_plan")
 RNG_SEEDS = (42, 43, 44, 45)
 MAX_WORKERS = 2
 ```
@@ -2493,12 +2588,12 @@ OBJECTIVE_FILE = OBJECTIVES_DIR / "gingles_partial.json"
 MAXIMIZE_OBJECTIVE = True
 ```
 
-Each tilted seed writes both a BENDL recording and a `_scores.csv` file. RustReCom remains a
+Each tilted run writes both a BENDL recording and a `_scores.csv` file. RustReCom remains a
 standalone executable; the Python scheduler starts `rustrecom chain` or `rustrecom tilted` as a
-child process for each seed.
+child process for each starting-plan and seed combination.
 
 The scheduler shows one aggregate spinner while chains run. Output from GerryChain and RustReCom,
-including their progress indicators, goes to the per-seed files in `chain_logs/` instead of being
+including their progress indicators, goes to the per-run files in `chain_logs/` instead of being
 interleaved in the calling terminal.
 
 The scheduler accepts the same `REGION_WEIGHTS` dictionary for GerryChain and both RustReCom modes.
@@ -2509,30 +2604,32 @@ experiment specification can use either engine. Region weights require an MST va
 
 `EXPERIMENT_TAG` is the short name of the experiment. Use the same tag for runs that belong to one
 analysis, such as `baseline`, `beta-0p5`, or `county-split-test`. Tags may contain letters, numbers,
-periods, underscores, and hyphens. `run_chains.py` uses the experimenter's current local date.
+periods, underscores, and hyphens. `pipeline_scripts/run_chains.py` uses the experimenter's current
+local date. Values written into filenames cannot contain the reserved `__` field delimiter.
 
-The scheduler adds `PY_` for GerryChain or `RUST_` for either RustReCom mode, then writes:
+The scheduler adds `PY_` for GerryChain, `RUST_CHAIN_` for ordinary RustReCom, or `RUST_TILTED_`
+for tilted RustReCom, then writes:
 
 ```text
 <ENGINE>_<OUTPUT_PREFIX>__STEPS_<steps>__RNGSEED_<seed>__TOL_<tol>__SEEDPLN__<plan_name>__TAG_<tag>__DATE_<date>.bendl
 ```
 
-`<plan_name>` is the node attribute named by `STARTING_PLAN`. The log has the identical stem with
-`.log` and records the engine, seed, child output, and exit code. Tilted RustReCom adds
+`<plan_name>` is one of the node attributes in `STARTING_PLANS`. The log has the identical stem
+with `.log` and records the engine, seed, child output, and exit code. Tilted RustReCom adds
 `_scores.csv` to the stem. For example:
 
 ```text
 PY_VANILLA_PA__STEPS_1000__RNGSEED_42__TOL_0p01__SEEDPLN__seed_plan__TAG_baseline__DATE_2026-08-06.bendl
 ```
 
-`OUTPUT_PREFIX` supplies `VANILLA_PA`; do not include the automatic `PY_` or `RUST_` prefix.
+`OUTPUT_PREFIX` supplies `VANILLA_PA`; do not include an automatic engine prefix.
 
-The runner exits nonzero when any seed fails and reports the corresponding log path.
+The runner exits nonzero when any run fails and reports the corresponding log path.
 
 ### Resource budget
 
-`MAX_WORKERS` controls how many independently seeded child processes run at once. CPU, memory, and
-I/O requirements scale with the number of concurrent processes.
+`MAX_WORKERS` controls how many child processes run at once. CPU, memory, and I/O requirements
+scale with the number of concurrent processes.
 
 ## Scoring a Pennsylvania ensemble
 
@@ -2546,21 +2643,32 @@ I/O requirements scale with the number of concurrent processes.
 - aggregate Democratic seats across several elections; and
 - election-specific disproportionality.
 
-Run it from the project root with:
+Run the configured data collection stage from the project root with:
 
 ```bash
-uv run pipeline_scripts/metrics/collect_data_vanilla_pa.py --max-workers 1
+uv run pipeline_scripts/run_data_collection_scripts.py
 ```
 
-The default `--input-glob 'VANILLA_PA*.bendl'` matches the ordinary RustReCom example.
-`--max-workers` evaluates independent BENDL files in separate processes. Results are stored under
+`DATA_COLLECTION_SCRIPTS` at the top of that file lists the collectors to run. The Pennsylvania
+collector is included by default, and its own settings select inputs and evaluation batch size:
+
+```python
+INPUT_GLOB = "*VANILLA_PA*.bendl"
+MAX_WORKERS = 1
+BATCH_SIZE = 256
+```
+
+The default glob matches direct `VANILLA_PA...` outputs and all Python-runner outputs whose analysis
+prefix is `VANILLA_PA`, including the `PY_`, `RUST_CHAIN_`, and `RUST_TILTED_` engines.
+`MAX_WORKERS` evaluates independent BENDL files in separate processes, while `BATCH_SIZE` controls
+how many plans are scored together while streaming one recording. Results are stored under
 `stats/<recording-name>/` and can be opened with `gerrytools.scoring.EnsembleEvalResult`.
 
 Generation and scoring are separate stages. A high-throughput workflow consists of:
 
-1. generate several chains with unique seeds and one output file per seed;
+1. generate chains for the configured starting plans and seeds;
 2. collect the completed recordings and their logs;
-3. score the completed files (this can be done in parallel with `--max-workers`);
+3. score the completed files, using `MAX_WORKERS` for process-level parallelism;
 4. open the reusable `EnsembleEvalResult` directories in the plotting scripts.
 
 Evaluation is valid when the graph, geometry, assignment order, and column names describe the same
@@ -2574,22 +2682,23 @@ geometry in `data/pa_gdf.parquet`.
 
 The figure scripts save PNG files and do not require an interactive Matplotlib window.
 
-Generate the starting-plan, Philadelphia, partisan choropleth, and alternate-plan maps:
+Run the configured figure generation stage:
 
 ```bash
-uv run pipeline_scripts/figure_generators/base_plan_figures.py
+uv run pipeline_scripts/run_figure_generation_scripts.py
 ```
 
-After running the metrics collector, generate the ensemble figures:
+`FIGURE_GENERATION_SCRIPTS` at the top of that file lists the scripts and their execution order. It
+runs the starting-plan maps and the three ensemble figures by default. Run data collection first so
+the ensemble figures have evaluation directories to read.
 
-```bash
-uv run pipeline_scripts/figure_generators/cut_edges_histogram.py
-uv run pipeline_scripts/figure_generators/disprop_scatter.py
-uv run pipeline_scripts/figure_generators/reock_boxplot.py
-```
+Each ensemble script exposes `STATS_GLOB`, `STARTING_PLAN`, and plot-specific settings at the top of
+the file. The default `*VANILLA_PA*` glob matches evaluation directories produced from direct or
+Python-scheduled runs. Images appear under `figures/<recording-name>/`; base-plan maps appear under
+`figures/plan_maps/`.
 
-These three scripts process directories matching `stats/VANILLA_PA*`. Their images appear under
-`figures/<recording-name>/`. The base-plan maps appear under `figures/plan_maps/`.
+`STARTING_PLAN` is one common reference for every directory selected by `STATS_GLOB`. To compare
+each starting plan separately, narrow `STATS_GLOB`, change `STARTING_PLAN`, and rerun the script.
 
 ## Adapting the project to another state
 
@@ -2625,8 +2734,8 @@ the overwrite flag so rerunning the same seed replaces its earlier example.
 
 ### The metrics or ensemble figure command prints nothing
 
-Check the input naming convention. The evaluator looks for `chain_outputs/VANILLA_PA*.bendl`, and
-the ensemble figures look for `stats/VANILLA_PA*` directories.
+Check `INPUT_GLOB` at the top of the evaluator and `STATS_GLOB` at the top of each ensemble figure
+script. Their defaults match names containing `VANILLA_PA`.
 
 ### Plotting reports a non-GUI backend
 
@@ -2636,10 +2745,10 @@ That is expected when no display is attached. Look for the saved path printed by
 ### A long run appears stuck
 
 First reproduce the command with a much smaller `--n-steps`. Use `--show-progress`, inspect the
-per-seed log for batch jobs, and check CPU use and available storage. Tight population tolerances
+per-run log for batch jobs, and check CPU use and available storage. Tight population tolerances
 and the chosen graph or proposal variant can materially affect proposal time.
 
-### A parallel batch reports failed seeds
+### A parallel batch reports failed runs
 
 Open the reported file under `chain_logs/`. The runner preserves each child's complete output and
 returns a failing status instead of silently continuing.
@@ -11996,19 +12105,18 @@ TEMPLATE_PAYLOAD_EOF
    "outputs": [],
    "source": [
     "from pathlib import Path\n",
-    "from tqdm.auto import tqdm\n",
     "\n",
-    "from gerrychain import Graph, MarkovChain, Partition\n",
-    "from gerrychain.updaters import Tally\n",
+    "from gerrychain import Graph, Partition\n",
     "from gerrychain.proposals import ReCom\n",
-    "\n",
+    "from gerrychain.updaters import Tally\n",
     "from gerrytools.ben import RecordedChain\n",
     "from gerrytools.plotting import Histogram\n",
-    "from gerrytools.scoring import PlanEvaluator, CutEdges, cut_edges\n",
+    "from gerrytools.scoring import CutEdges, PlanEvaluator, cut_edges\n",
+    "from tqdm.auto import tqdm\n",
     "\n",
     "GRAPH_PATH = Path(\"../JSON_dualgraphs/gerrymandria.json\")\n",
     "RUN_NAME = \"EXAMPLE_gerrymandria_cut_edges_walkthrough\"\n",
-    "OUTPUT_PATH = Path(f\"../chain_outputs/{RUN_NAME}.bendl\")\n",
+    "BENDL_PATH = Path(f\"../chain_outputs/{RUN_NAME}.bendl\")\n",
     "STATS_DIR = Path(f\"../stats/{RUN_NAME}\")\n",
     "POPULATION_COLUMN = \"TOTPOP\"\n",
     "STARTING_PLAN = \"district\"\n",
@@ -12052,7 +12160,7 @@ TEMPLATE_PAYLOAD_EOF
     "    graph,\n",
     "    total_steps=TOTAL_STEPS,\n",
     "    rng=RNG_SEED,\n",
-    "    output_path=OUTPUT_PATH\n",
+    "    output_path=BENDL_PATH,\n",
     ")\n",
     "\n",
     "# Currently RecordedChains can only deal with integer assignments\n",
@@ -12107,9 +12215,9 @@ TEMPLATE_PAYLOAD_EOF
    "metadata": {},
    "outputs": [],
    "source": [
-    "evaluator = PlanEvaluator(graph)\n",
+    "evaluator = PlanEvaluator(chain.graph)\n",
     "evaluator.add_metrics(CutEdges())\n",
-    "result = evaluator.evaluate_stream(OUTPUT_PATH, STATS_DIR, update=True)"
+    "result = evaluator.evaluate_stream(BENDL_PATH, STATS_DIR, update=True)"
    ]
   },
   {
@@ -12147,11 +12255,430 @@ TEMPLATE_PAYLOAD_EOF
 }
 TEMPLATE_PAYLOAD_EOF
         ;;
-    "pipeline_scripts/chain_runners/example_cli.py") cat << 'TEMPLATE_PAYLOAD_EOF'
+    "pipeline_scripts/chain_runners/batch_runner.py") cat << 'TEMPLATE_PAYLOAD_EOF'
+import json
+import math
+import subprocess
+import sys
+from collections.abc import Sequence
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from dataclasses import dataclass
+from datetime import date
+from itertools import cycle
+from pathlib import Path
+from re import fullmatch
+from threading import Event, Lock
+from typing import Literal
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
+ACTIVE_PROCESSES: set[subprocess.Popen[bytes]] = set()
+ACTIVE_PROCESSES_LOCK = Lock()
+STOP_REQUESTED = Event()
+
+
+RECOM_ENGINES = ("gerrychain", "rustrecom-chain", "rustrecom-tilted")
+RECOM_VARIANTS = (
+    "cut-edges-mst",
+    "cut-edges-ust",
+    "district-pairs-mst",
+    "district-pairs-ust",
+)
+
+ReComEngine = Literal["gerrychain", "rustrecom-chain", "rustrecom-tilted"]
+ReComVariant = Literal[
+    "cut-edges-mst",
+    "cut-edges-ust",
+    "district-pairs-mst",
+    "district-pairs-ust",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ChainSettings:
+    """Describes the inputs and destinations for one independent ReCom chain.
+
+    Attributes:
+        engine (ReComEngine): Program used to generate the chain. ``gerrychain`` runs the
+            Python example, ``rustrecom-chain`` samples an ordinary RustReCom chain, and
+            ``rustrecom-tilted`` applies a RustReCom optimization objective.
+        graph_path (Path): Dual graph supplied to the selected engine.
+        output_prefix (str): Analysis name included in output filenames, such as
+            ``VANILLA_PA`` or ``GINGLES_PARTIAL_PA``.
+        starting_plan (str): Node attribute containing each unit's starting district.
+        pop_col (str): Node attribute containing the population used for balance constraints.
+        rng_seed (int): Seed that makes this chain's random proposal stream reproducible.
+        total_steps (int): Number of chain positions requested from the selected engine.
+        population_tolerance (float): Maximum fractional population deviation allowed by ReCom.
+            For example, ``0.01`` permits one percent deviation from ideal population.
+        recom_variant (ReComVariant): Rule used to select adjacent districts and sample a
+            spanning tree for each ReCom proposal.
+        run_date (str): Experiment date written into the output filenames in ``YYYY-MM-DD`` form.
+        output_dir (Path): Directory for BENDL recordings and tilted score files.
+        log_dir (Path): Directory for one child-process log per configured run.
+        tag (str): Short experiment name included in every output filename.
+        objective_file (Path | None): RustReCom objective JSON used for a tilted chain.
+        maximize (bool): Whether a tilted chain searches for larger or smaller objective values.
+        region_weights (dict[str, float] | None): Surcharges for cutting named region columns.
+            Region-aware proposals require an MST ReCom variant.
+    """
+
+    engine: ReComEngine
+    graph_path: Path
+    output_prefix: str
+    starting_plan: str
+    pop_col: str
+    rng_seed: int
+    total_steps: int
+    population_tolerance: float
+    recom_variant: ReComVariant
+    run_date: str
+    output_dir: Path
+    log_dir: Path
+    tag: str = "baseline"
+    objective_file: Path | None = None
+    maximize: bool = True
+    region_weights: dict[str, float] | None = None
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("output_prefix", self.output_prefix),
+            ("starting_plan", self.starting_plan),
+            ("tag", self.tag),
+            ("run_date", self.run_date),
+        ):
+            try:
+                validate_filename_token(value)
+            except ValueError as error:
+                raise ValueError(f"Invalid {name}: {error}") from error
+        if self.engine not in RECOM_ENGINES:
+            raise ValueError(f"Unknown engine: {self.engine}.")
+        if self.recom_variant not in RECOM_VARIANTS:
+            raise ValueError(f"Unknown ReCom variant: {self.recom_variant}.")
+        if (
+            isinstance(self.total_steps, bool)
+            or not isinstance(self.total_steps, int)
+            or self.total_steps < 1
+        ):
+            raise ValueError("total_steps must be a positive integer.")
+        if (
+            isinstance(self.population_tolerance, bool)
+            or not isinstance(self.population_tolerance, (int, float))
+            or not math.isfinite(self.population_tolerance)
+            or not 0 <= self.population_tolerance <= 1
+        ):
+            raise ValueError("population_tolerance must be a finite number from 0 through 1.")
+        try:
+            parsed_date = date.fromisoformat(self.run_date)
+        except ValueError as error:
+            raise ValueError("run_date must use YYYY-MM-DD format.") from error
+        if parsed_date.isoformat() != self.run_date:
+            raise ValueError("run_date must use YYYY-MM-DD format.")
+        if self.engine == "rustrecom-tilted" and self.objective_file is None:
+            raise ValueError("objective_file is required for rustrecom-tilted.")
+        if self.engine != "rustrecom-tilted" and self.objective_file is not None:
+            raise ValueError("objective_file is only valid for rustrecom-tilted.")
+        if not self.graph_path.is_file():
+            raise ValueError(f"graph_path must be an existing file: {self.graph_path}")
+        if self.objective_file is not None and not self.objective_file.is_file():
+            raise ValueError(f"objective_file must be an existing file: {self.objective_file}")
+        for name, path in (("output_dir", self.output_dir), ("log_dir", self.log_dir)):
+            if path.exists() and not path.is_dir():
+                raise ValueError(f"{name} must be a directory: {path}")
+            path.mkdir(parents=True, exist_ok=True)
+
+        if self.region_weights is not None:
+            if not isinstance(self.region_weights, dict):
+                raise ValueError("region_weights must be a dictionary.")
+            for column, weight in self.region_weights.items():
+                if not isinstance(column, str) or not column:
+                    raise ValueError("region_weights column names must be non-empty strings.")
+                if (
+                    isinstance(weight, bool)
+                    or not isinstance(weight, (int, float))
+                    or not math.isfinite(weight)
+                ):
+                    raise ValueError("region_weights values must be finite numbers.")
+
+        if self.region_weights and self.recom_variant not in (
+            "cut-edges-mst",
+            "district-pairs-mst",
+        ):
+            raise ValueError(
+                "Region weights are only applicable for 'mst' ReCom variants. "
+                f"Provided variant: {self.recom_variant}"
+            )
+
+
+def validate_filename_token(value: str) -> None:
+    """Validates one component of a generated output filename.
+
+    Args:
+        value (str): Proposed filename component.
+
+    Raises:
+        ValueError: If the value is not path-safe or contains the ``__`` field delimiter.
+    """
+    if not fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value):
+        raise ValueError("use only letters, numbers, periods, underscores, and hyphens")
+    if "__" in value:
+        raise ValueError("must not contain the reserved '__' filename delimiter")
+
+
+def run_chain(settings: ChainSettings) -> tuple[int, str, int, Path]:
+    """Runs one chain as a child process and records its console output.
+
+    The function translates shared experiment settings into either the GerryChain example CLI or
+    RustReCom CLI. Each chain writes to its own BENDL and log files, which prevents output from
+    concurrent runs from being interleaved.
+
+    Args:
+        settings (ChainSettings): Complete settings for one chain.
+
+    Returns:
+        tuple[int, str, int, Path]: Random seed, starting-plan column, child-process exit code, and
+            log path. An exit code of zero means the chain completed successfully.
+    """
+    match settings.engine:
+        case "gerrychain":
+            engine_prefix = "PY"
+        case "rustrecom-chain":
+            engine_prefix = "RUST_CHAIN"
+        case "rustrecom-tilted":
+            engine_prefix = "RUST_TILTED"
+        case _:
+            raise ValueError(f"Unknown engine: {settings.engine}")
+
+    tolerance_label = f"{settings.population_tolerance:g}".replace(".", "p")
+    filename_stem = (
+        f"{engine_prefix}_{settings.output_prefix}"
+        f"__STEPS_{settings.total_steps}"
+        f"__RNGSEED_{settings.rng_seed}"
+        f"__TOL_{tolerance_label}"
+        f"__SEEDPLN__{settings.starting_plan}"
+        f"__TAG_{settings.tag}"
+        f"__DATE_{settings.run_date}"
+    )
+    output_path = settings.output_dir / f"{filename_stem}.bendl"
+    log_path = settings.log_dir / f"{filename_stem}.log"
+    if settings.engine == "gerrychain":
+        command = [
+            sys.executable,
+            str(ROOT_DIR / "pipeline_scripts" / "chain_runners" / "gerrychain_cli.py"),
+            "--graph-path",
+            str(settings.graph_path),
+            "--output-path",
+            str(output_path),
+            "--starting-plan",
+            settings.starting_plan,
+            "--pop-col",
+            settings.pop_col,
+            "--rng-seed",
+            str(settings.rng_seed),
+            "--population-tolerance",
+            str(settings.population_tolerance),
+            "--total-steps",
+            str(settings.total_steps),
+            "--recom-variant",
+            settings.recom_variant,
+        ]
+    else:
+        rustrecom_command = "chain" if settings.engine == "rustrecom-chain" else "tilted"
+        command = [
+            "rustrecom",
+            rustrecom_command,
+            "--graph-json",
+            str(settings.graph_path),
+            "--output-file",
+            str(output_path),
+            "--assignment-col",
+            settings.starting_plan,
+            "--pop-col",
+            settings.pop_col,
+            "--rng-seed",
+            str(settings.rng_seed),
+            "--tol",
+            str(settings.population_tolerance),
+            "--n-steps",
+            str(settings.total_steps),
+            "--variant",
+            settings.recom_variant,
+            "--writer",
+            "bendl",
+            "--overwrite-output",
+        ]
+        if settings.engine == "rustrecom-tilted" and settings.objective_file is not None:
+            scores_path = output_path.with_name(f"{output_path.stem}_scores.csv")
+            command.extend(
+                [
+                    "--objective",
+                    str(settings.objective_file),
+                    "--maximize",
+                    str(settings.maximize).lower(),
+                    "--scores-output-file",
+                    str(scores_path),
+                ]
+            )
+
+    if settings.region_weights:
+        command.extend(["--region-weights", json.dumps(settings.region_weights, sort_keys=True)])
+
+    with log_path.open("wb") as log_file:
+        log_file.write(
+            f"Starting {settings.engine} chain with RNG seed {settings.rng_seed}.\n".encode()
+        )
+        log_file.flush()
+        try:
+            # Registration shares a lock with interruption cleanup, so cleanup cannot miss a
+            # process that has started but is not yet tracked.
+            with ACTIVE_PROCESSES_LOCK:
+                if STOP_REQUESTED.is_set():
+                    log_file.write(b"Cancelled before launch.\n")
+                    return settings.rng_seed, settings.starting_plan, 130, log_path
+                process = subprocess.Popen(command, stdout=log_file, stderr=subprocess.STDOUT)
+                ACTIVE_PROCESSES.add(process)
+        except OSError as error:
+            log_file.write(f"Could not start chain: {error}\n".encode())
+            return settings.rng_seed, settings.starting_plan, 127, log_path
+
+        try:
+            exit_code = process.wait()
+            log_file.write(f"\nChild process exited with code {exit_code}.\n".encode())
+            return settings.rng_seed, settings.starting_plan, exit_code, log_path
+        finally:
+            with ACTIVE_PROCESSES_LOCK:
+                ACTIVE_PROCESSES.discard(process)
+
+
+def stop_active_processes() -> None:
+    """Stops child chains after an interruption, then kills any that do not exit promptly."""
+    with ACTIVE_PROCESSES_LOCK:
+        processes = list(ACTIVE_PROCESSES)
+    for process in processes:
+        process.terminate()
+    for process in processes:
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+
+
+def run_chains(
+    settings_by_run: Sequence[ChainSettings],
+    max_workers: int = 1,
+) -> None:
+    """Runs configured chains with a limit on simultaneous child processes.
+
+    This is the main Python interface for batch runs. Each ``ChainSettings`` value describes one
+    chain, and ``max_workers`` controls how many of those chains may run at the same time. Child
+    output is kept in separate log files so messages from concurrent chains do not overlap.
+
+    Args:
+        settings_by_run (Sequence[ChainSettings]): Settings for each chain. Every random-seed and
+            starting-plan combination must be unique within the batch.
+        max_workers (int): Maximum number of child processes to run simultaneously. CPU, memory,
+            and I/O requirements scale with this value.
+
+    Raises:
+        ValueError: If the batch is empty, contains duplicate run identifiers, or ``max_workers``
+            is not a positive integer.
+        RuntimeError: If one or more child chains exit unsuccessfully.
+        KeyboardInterrupt: If the user interrupts the batch. Active child chains are stopped
+            before the exception is raised.
+    """
+    settings = list(settings_by_run)
+    if not settings:
+        raise ValueError("At least one chain must be configured.")
+    if isinstance(max_workers, bool) or not isinstance(max_workers, int) or max_workers < 1:
+        raise ValueError("max_workers must be a positive integer.")
+
+    run_ids = [(chain.rng_seed, chain.starting_plan) for chain in settings]
+    if len(set(run_ids)) != len(run_ids):
+        raise ValueError("Each RNG-seed and starting-plan combination must be unique.")
+
+    STOP_REQUESTED.clear()
+    failures: list[tuple[int, str, int, Path]] = []
+
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(settings))) as executor:
+        futures = []
+        try:
+            futures = [executor.submit(run_chain, chain) for chain in settings]
+            pending = set(futures)
+            completed = 0
+            spinner = cycle("|/-\\")
+            status_width = 0
+            engine_names = ", ".join(sorted({chain.engine for chain in settings}))
+            print(
+                f"Running {len(futures)} chain(s) with {engine_names}...",
+                file=sys.stderr,
+                flush=True,
+            )
+            while pending:
+                done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
+                if not done and sys.stderr.isatty():
+                    status = (
+                        f"{next(spinner)} Running chains ({completed}/{len(futures)} completed)"
+                    )
+                    status_width = max(status_width, len(status))
+                    print(
+                        f"\r{status:<{status_width}}",
+                        end="",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    continue
+
+                if sys.stderr.isatty() and status_width:
+                    print(
+                        f"\r{'':<{status_width}}\r",
+                        end="",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                for future in done:
+                    seed, starting_plan, exit_code, log_path = future.result()
+                    completed += 1
+                    if exit_code:
+                        failures.append((seed, starting_plan, exit_code, log_path))
+                        print(
+                            f"Seed {seed}, plan {starting_plan!r} failed; see {log_path}.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"Seed {seed}, plan {starting_plan!r} completed; log: {log_path}.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+        except KeyboardInterrupt:
+            STOP_REQUESTED.set()
+            for future in futures:
+                future.cancel()
+            stop_active_processes()
+            raise
+
+    if failures:
+        failed_runs = ", ".join(
+            f"seed {seed} / plan {starting_plan}" for seed, starting_plan, _, _ in failures
+        )
+        raise RuntimeError(f"{len(failures)} chain(s) failed ({failed_runs}).")
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    "pipeline_scripts/chain_runners/gerrychain_cli.py") cat << 'TEMPLATE_PAYLOAD_EOF'
+"""Run one GerryChain recording behind the parallel batch interface.
+
+The batch runner launches each chain as a child process so GerryChain and RustReCom use the
+same scheduling, logging, interruption, and failure-handling code. This CLI is that subprocess
+boundary for GerryChain. It keeps the orchestrator's one-chain command syntax consistent across
+engines; users normally edit ``pipeline_scripts/run_chains.py`` instead.
+"""
+
 import json
 import math
 import sys
 from collections.abc import Hashable
+from numbers import Number
+from operator import eq
 from pathlib import Path
 from typing import Any
 
@@ -12167,6 +12694,8 @@ RECOM_VARIANTS = {
     "district-pairs-mst": ReCom.district_pairs_mst,
     "district-pairs-ust": ReCom.district_pairs_ust,
 }
+# binary-ensemble 2.0 stores assignment labels as unsigned 16-bit integers.
+MAX_BENDL_DISTRICT_ID = (1 << 16) - 1
 
 
 def node_items(graph: Any) -> list[tuple[Hashable, dict[str, Any]]]:
@@ -12197,23 +12726,101 @@ def load_graph(graph_path: Path) -> Graph:
 
 
 def integer_assignment(graph: Any, assignment_column: str) -> dict[Hashable, int]:
-    """Return a BENDL-compatible integer assignment from a graph node attribute."""
+    """Return a lossless BENDL-compatible assignment from a graph node attribute.
+
+    Note: This function exists primarily as a protective measure against obviously wrong district
+    labels so that the pipeline will run. In all likelihood, most users will have districts with
+    integer IDs and this function will be unnecessary.
+
+    Integer-like labels retain their values when conversion is one-to-one and the IDs are between
+    0 and 65,535. Other hashable labels receive stable integer IDs based on graph iteration order.
+    BENDL can represent at most 65,536 distinct labels.
+
+    Args:
+        graph: GerryChain or NetworkX graph containing the assignment attribute.
+        assignment_column: Node attribute containing each unit's district label.
+
+    Returns:
+        Integer district labels keyed by graph node.
+
+    Raises:
+        click.ClickException: If a label is missing, non-finite, unhashable, or otherwise invalid.
+    """
+    raw_assignment: dict[Hashable, Any] = {}
     try:
-        raw_assignment: dict[Hashable, Any] = {
-            node: data[assignment_column] for node, data in node_items(graph)
-        }
+        for node, data in node_items(graph):
+            label = data[assignment_column]
+            if label is None:
+                raise click.ClickException(
+                    f"Starting-plan attribute {assignment_column!r} contains a missing label."
+                )
+            # Some missing-value sentinels are not numeric but compare unequal to themselves.
+            # e.g., numpy.nan, pandas.NA, and pd.NA
+            try:
+                self_equal = bool(eq(label, label))
+            except (TypeError, ValueError) as error:
+                raise click.ClickException(
+                    f"Starting-plan attribute {assignment_column!r} contains an invalid label: "
+                    f"{label!r}."
+                ) from error
+            if not self_equal:
+                raise click.ClickException(
+                    f"Starting-plan attribute {assignment_column!r} contains a missing label."
+                )
+            if isinstance(label, Number):
+                try:
+                    finite = math.isfinite(label)
+                except TypeError as error:
+                    raise click.ClickException(
+                        f"Starting-plan attribute {assignment_column!r} contains a non-real "
+                        f"numeric label: {label!r}."
+                    ) from error
+                if not finite:
+                    raise click.ClickException(
+                        f"Starting-plan attribute {assignment_column!r} contains a non-finite "
+                        f"numeric label: {label!r}."
+                    )
+            try:
+                hash(label)
+            except TypeError as error:
+                raise click.ClickException(
+                    f"Starting-plan attribute {assignment_column!r} contains an unhashable label: "
+                    f"{label!r}."
+                ) from error
+            raw_assignment[node] = label
     except KeyError as error:
         raise click.ClickException(
             f"Starting-plan attribute {assignment_column!r} is missing from at least one node."
         ) from error
+
+    distinct_label_count = len(set(raw_assignment.values()))
+    if distinct_label_count > MAX_BENDL_DISTRICT_ID + 1:
+        raise click.ClickException(
+            f"Starting-plan attribute {assignment_column!r} contains {distinct_label_count:,} "
+            f"distinct labels; BENDL supports at most {MAX_BENDL_DISTRICT_ID + 1:,}."
+        )
+
     try:
-        return {node: int(label) for node, label in raw_assignment.items()}
-    except (TypeError, ValueError):
-        label_ids: dict[Hashable, int] = {}
-        return {
-            node: label_ids.setdefault(label, len(label_ids))
+        converted = {node: int(label) for node, label in raw_assignment.items()}
+    except (OverflowError, TypeError, ValueError):
+        converted = None
+
+    if converted is not None:
+        numeric_labels_are_exact = all(
+            not isinstance(label, Number) or label == converted[node]
             for node, label in raw_assignment.items()
-        }
+        )
+        conversion_is_one_to_one = len(set(converted.values())) == distinct_label_count
+        conversion_is_in_range = all(
+            0 <= label <= MAX_BENDL_DISTRICT_ID for label in converted.values()
+        )
+        if numeric_labels_are_exact and conversion_is_one_to_one and conversion_is_in_range:
+            return converted
+
+    label_ids: dict[Any, int] = {}
+    return {
+        node: label_ids.setdefault(label, len(label_ids)) for node, label in raw_assignment.items()
+    }
 
 
 def parse_region_weights(
@@ -12383,7 +12990,7 @@ TEMPLATE_PAYLOAD_EOF
     "pipeline_scripts/chain_runners/pa_example_script_opt.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
 #!/usr/bin/env bash
 
-# This is a direct RustReCom CLI reference. Use run_chains.py to coordinate normal batches.
+# This is a direct RustReCom CLI reference. Use pipeline_scripts/run_chains.py for normal batches.
 # `tilted` runs ReCom while favoring proposals that improve the selected objective score.
 # Input and chain flags have the same meaning as in the ordinary `chain` example.
 # `--objective` loads the score definition, and `--maximize true` makes larger scores preferable.
@@ -12415,7 +13022,7 @@ tol_label=${tol/./p}
 
 for seed in "${rng_seed[@]}"; do
     prefix="GINGLES_PARTIAL_PA__STEPS_${n_steps}__RNGSEED_${seed}__TOL_${tol_label}"
-    output_file="${output_dir}/${prefix}.bendl"
+    bendl_file="${output_dir}/${prefix}.bendl"
     scores_file="${output_dir}/${prefix}_scores.csv"
 
     echo "Running rustrecom tilted with seed: $seed ..."
@@ -12431,7 +13038,7 @@ for seed in "${rng_seed[@]}"; do
         --maximize true \
         --variant district-pairs-mst \
         --writer bendl \
-        --output-file "$output_file" \
+        --output-file "$bendl_file" \
         --scores-output-file "$scores_file" \
         --overwrite-output \
         --show-progress
@@ -12441,7 +13048,7 @@ TEMPLATE_PAYLOAD_EOF
     "pipeline_scripts/chain_runners/pa_example_script_vanilla.sh") cat << 'TEMPLATE_PAYLOAD_EOF'
 #!/usr/bin/env bash
 
-# This is a direct RustReCom CLI reference. Use run_chains.py to coordinate normal batches.
+# This is a direct RustReCom CLI reference. Use pipeline_scripts/run_chains.py for normal batches.
 # `chain` samples ordinary ReCom plans from the assignment stored on each graph node.
 # Input flags identify the adjacency-data graph and its assignment and population columns.
 # Chain flags set the seed, number of steps, population tolerance, and ReCom proposal variant.
@@ -12452,7 +13059,7 @@ set -e
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 PROJECT_ROOT=$(cd "${SCRIPT_DIR}/../.." && pwd -P)
 
-n_steps=100000
+n_steps=1000
 rng_seed=(42 43)
 tol=0.01
 assignment_col="seed_plan"
@@ -12469,7 +13076,7 @@ fi
 mkdir -p "$output_dir"
 
 for seed in "${rng_seed[@]}"; do
-    output_file="${output_dir}/VANILLA_PA__STEPS_${n_steps}__RNGSEED_${seed}__TOL_${tol/./p}.bendl"
+    bendl_file="${output_dir}/VANILLA_PA__STEPS_${n_steps}__RNGSEED_${seed}__TOL_${tol/./p}.bendl"
 
     echo "Running rustrecom chain with seed: $seed ..."
 
@@ -12482,7 +13089,7 @@ for seed in "${rng_seed[@]}"; do
         --tol "$tol" \
         --variant district-pairs-mst \
         --writer bendl \
-        --output-file "$output_file" \
+        --output-file "$bendl_file" \
         --overwrite-output \
         --show-progress
 done
@@ -12877,6 +13484,12 @@ from gerrytools.scoring import EnsembleEvalResult, cut_edges
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FIGURES_DIR = ROOT_DIR / "figures"
 
+# Figure settings: edit this block, then run this file with `uv run`.
+STATS_GLOB = "*VANILLA_PA*"
+STARTING_PLAN = "seed_plan"
+BIN_WIDTH = 10
+X_LIMITS = (2750, 3550)
+
 
 def original_cut_edges() -> int:
     """Calculates the cut-edge count for the graph's seed plan.
@@ -12886,7 +13499,7 @@ def original_cut_edges() -> int:
     """
     graph = Graph.from_json(str(ROOT_DIR / "JSON_dualgraphs" / "pa_dualgraph.json"))
 
-    partition = Partition(graph, assignment="seed_plan")
+    partition = Partition(graph, assignment=STARTING_PLAN)
 
     cut_edge_count = cut_edges(partition)
     if not isinstance(cut_edge_count, (int, float)):
@@ -12912,8 +13525,8 @@ def create_cut_edge_hist(stats_dir: Path) -> Path:
 
     hist.add_vertical_lines([original_cut_edges()], linecolor="cherryblossompink", linewidth=2)
 
-    hist.set_bin_widths(10)
-    hist.set_xlim(2750, 3550)
+    hist.set_bin_widths(BIN_WIDTH)
+    hist.set_xlim(*X_LIMITS)
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     output_path = FIGURES_DIR / stats_dir.name / f"cut_edges_histogram_{stats_dir.name}.png"
@@ -12925,7 +13538,11 @@ def create_cut_edge_hist(stats_dir: Path) -> Path:
 def main() -> None:
     """Generates a histogram for every vanilla Pennsylvania evaluation run."""
     stats_base_dir = ROOT_DIR / "stats"
-    for stats_dir in stats_base_dir.glob("VANILLA_PA*"):
+    stats_dirs = sorted(stats_base_dir.glob(STATS_GLOB))
+    if not stats_dirs:
+        raise FileNotFoundError(f"No directories in {stats_base_dir} match {STATS_GLOB!r}.")
+
+    for stats_dir in stats_dirs:
         print(f"Processing '{stats_dir.name}' ...")
 
         output_path = create_cut_edge_hist(stats_dir)
@@ -12947,7 +13564,9 @@ from gerrytools.scoring import EnsembleEvalResult, disproportionality
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FIGURES_DIR = ROOT_DIR / "figures"
 
-
+# Figure settings: edit this block, then run this file with `uv run`.
+STATS_GLOB = "*VANILLA_PA*"
+STARTING_PLAN = "seed_plan"
 ELECTIONS: tuple[str, ...] = (
     "ag_16",
     "ag_20",
@@ -12967,7 +13586,7 @@ def original_disprop() -> tuple[float, float]:
     """
     graph = Graph.from_json(str(ROOT_DIR / "JSON_dualgraphs" / "pa_dualgraph.json"))
 
-    partition = Partition(graph, assignment="seed_plan")
+    partition = Partition(graph, assignment=STARTING_PLAN)
 
     disprop_values: list[float] = []
     for election in ELECTIONS:
@@ -13034,7 +13653,11 @@ def create_disprop_scatter(stats_dir: Path) -> Path:
 def main() -> None:
     """Generates a scatter plot for every vanilla Pennsylvania evaluation run."""
     stats_base_dir = ROOT_DIR / "stats"
-    for stats_dir in stats_base_dir.glob("VANILLA_PA*"):
+    stats_dirs = sorted(stats_base_dir.glob(STATS_GLOB))
+    if not stats_dirs:
+        raise FileNotFoundError(f"No directories in {stats_base_dir} match {STATS_GLOB!r}.")
+
+    for stats_dir in stats_dirs:
         print(f"Processing '{stats_dir.name}' ...")
 
         output_path = create_disprop_scatter(stats_dir)
@@ -13058,6 +13681,10 @@ from gerrytools.scoring import EnsembleEvalResult, reock
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FIGURES_DIR = ROOT_DIR / "figures"
 
+# Figure settings: edit this block, then run this file with `uv run`.
+STATS_GLOB = "*VANILLA_PA*"
+STARTING_PLAN = "seed_plan"
+
 
 def original_reock() -> pd.Series:
     """Calculates seed-plan Reock scores ordered from least to most compact district.
@@ -13068,7 +13695,7 @@ def original_reock() -> pd.Series:
     graph = Graph.from_json(str(ROOT_DIR / "JSON_dualgraphs" / "pa_dualgraph.json"))
     gdf = gpd.read_parquet(ROOT_DIR / "data" / "pa_gdf.parquet").to_crs("EPSG:5070")
 
-    partition = Partition(graph, assignment="seed_plan")
+    partition = Partition(graph, assignment=STARTING_PLAN)
 
     vals = reock(partition, geometry=gdf).sort_values().reset_index(drop=True)
     return vals
@@ -13113,7 +13740,11 @@ def create_reock_boxes(stats_dir: Path) -> Path:
 def main() -> None:
     """Generates a Reock box plot for every vanilla Pennsylvania evaluation run."""
     stats_base_dir = ROOT_DIR / "stats"
-    for stats_dir in stats_base_dir.glob("VANILLA_PA*"):
+    stats_dirs = sorted(stats_base_dir.glob(STATS_GLOB))
+    if not stats_dirs:
+        raise FileNotFoundError(f"No directories in {stats_base_dir} match {STATS_GLOB!r}.")
+
+    for stats_dir in stats_dirs:
         print(f"Processing '{stats_dir.name}' ...")
 
         output_path = create_reock_boxes(stats_dir)
@@ -13128,7 +13759,6 @@ TEMPLATE_PAYLOAD_EOF
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-import click
 import geopandas as gpd
 from binary_ensemble import BendlDecoder
 from gerrytools.scoring import (
@@ -13143,6 +13773,13 @@ from gerrytools.scoring import (
 )
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
+
+# Analysis settings: edit this block, then run this file with `uv run`.
+INPUT_GLOB = "*VANILLA_PA*.bendl"
+MAX_WORKERS = 1
+BATCH_SIZE = 256
+CHAIN_DIR = ROOT_DIR / "chain_outputs"
+STATS_DIR = ROOT_DIR / "stats"
 
 
 def collect_results(
@@ -13216,46 +13853,26 @@ def collect_results(
     return output_dir
 
 
-@click.command()
-@click.option(
-    "--input-glob",
-    default="VANILLA_PA*.bendl",
-    show_default=True,
-    help="Filename pattern to select from chain_outputs.",
-)
-@click.option(
-    "--max-workers",
-    type=click.IntRange(min=1),
-    default=1,
-    show_default=True,
-    help="Maximum BENDL files to evaluate at once.",
-)
-@click.option(
-    "--batch-size",
-    type=click.IntRange(min=1),
-    default=256,
-    show_default=True,
-    help="Plans scored together in each GerryTools streaming batch.",
-)
-def main(input_glob: str, max_workers: int, batch_size: int) -> None:
+def main() -> None:
     """Evaluate matching Pennsylvania chains and write reusable metric results."""
-    chain_dir = ROOT_DIR / "chain_outputs"
-    stats_dir = ROOT_DIR / "stats"
-    bendl_files = sorted(chain_dir.glob(input_glob))
-    if not bendl_files:
-        raise click.ClickException(f"No files in {chain_dir} match {input_glob!r}.")
+    if MAX_WORKERS < 1 or BATCH_SIZE < 1:
+        raise ValueError("MAX_WORKERS and BATCH_SIZE must both be at least 1.")
 
-    stats_dir.mkdir(exist_ok=True, parents=True)
-    if max_workers == 1:
+    bendl_files = sorted(CHAIN_DIR.glob(INPUT_GLOB))
+    if not bendl_files:
+        raise FileNotFoundError(f"No files in {CHAIN_DIR} match {INPUT_GLOB!r}.")
+
+    STATS_DIR.mkdir(exist_ok=True, parents=True)
+    if MAX_WORKERS == 1:
         for bendl_file in bendl_files:
-            click.echo(f"Processing {bendl_file.name}...")
-            collect_results(bendl_file, stats_dir, batch_size, show_progress=True)
+            print(f"Processing {bendl_file.name}...")
+            collect_results(bendl_file, STATS_DIR, BATCH_SIZE, show_progress=True)
         return
 
     failures: list[str] = []
-    with ProcessPoolExecutor(max_workers=min(max_workers, len(bendl_files))) as executor:
+    with ProcessPoolExecutor(max_workers=min(MAX_WORKERS, len(bendl_files))) as executor:
         future_files = {
-            executor.submit(collect_results, path, stats_dir, batch_size, False): path
+            executor.submit(collect_results, path, STATS_DIR, BATCH_SIZE, False): path
             for path in bendl_files
         }
         for future in as_completed(future_files):
@@ -13265,572 +13882,150 @@ def main(input_glob: str, max_workers: int, batch_size: int) -> None:
             except (KeyError, OSError, RuntimeError, TypeError, ValueError) as error:
                 failures.append(f"{bendl_file.name}: {error}")
             else:
-                click.echo(f"Finished {bendl_file.name}: {output_dir}")
+                print(f"Finished {bendl_file.name}: {output_dir}")
 
     if failures:
         details = "\n".join(f"  {failure}" for failure in failures)
-        raise click.ClickException(f"Evaluation failed:\n{details}")
+        raise RuntimeError(f"Evaluation failed:\n{details}")
 
 
 if __name__ == "__main__":
     main()
 TEMPLATE_PAYLOAD_EOF
         ;;
-    "pipeline_scripts/run_parallel_chains.py") cat << 'TEMPLATE_PAYLOAD_EOF'
-import json
-import math
+    "pipeline_scripts/run_chains.py") cat << 'TEMPLATE_PAYLOAD_EOF'
+from datetime import datetime
+from pathlib import Path
+
+from chain_runners.batch_runner import (
+    ChainSettings,
+    ReComEngine,
+    ReComVariant,
+    run_chains,
+)
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+OBJECTIVES_DIR = PROJECT_ROOT / "pipeline_scripts" / "chain_runners" / "rustrecom_objectives"
+
+# Experiment settings: edit this block, then run `uv run pipeline_scripts/run_chains.py`.
+ENGINE: ReComEngine = "gerrychain"
+GRAPH_PATH = PROJECT_ROOT / "JSON_dualgraphs" / "pa_dualgraph.json"
+OUTPUT_PREFIX = "VANILLA_PA"
+STARTING_PLANS = ("seed_plan",)
+POPULATION_COLUMN = "total_pop_20"
+RNG_SEEDS = (42,)
+TOTAL_STEPS = 100
+POPULATION_TOLERANCE = 0.01
+RECOM_VARIANT: ReComVariant = "district-pairs-mst"
+EXPERIMENT_TAG = "quickstart"
+RUN_DATE = datetime.now().astimezone().date().isoformat()
+MAX_WORKERS = 1
+
+# Tilted RustReCom requires an objective file. Ordinary GerryChain and RustReCom runs use None.
+OBJECTIVE_FILE: Path | None = None
+MAXIMIZE_OBJECTIVE = True
+
+# Region weights are optional and require an MST variant. Example: {"county_id": 1.0}
+REGION_WEIGHTS: dict[str, float] | None = None
+
+
+def settings_for_run(rng_seed: int, starting_plan: str) -> ChainSettings:
+    """Builds the complete settings for one seed and starting-plan column.
+
+    Args:
+        rng_seed (int): Random seed that identifies and reproduces this chain.
+        starting_plan (str): Node column containing the initial district assignment.
+
+    Returns:
+        ChainSettings: Engine, graph, ReCom, and output settings for the chain.
+    """
+    return ChainSettings(
+        engine=ENGINE,
+        graph_path=GRAPH_PATH,
+        output_prefix=OUTPUT_PREFIX,
+        starting_plan=starting_plan,
+        pop_col=POPULATION_COLUMN,
+        rng_seed=rng_seed,
+        total_steps=TOTAL_STEPS,
+        population_tolerance=POPULATION_TOLERANCE,
+        recom_variant=RECOM_VARIANT,
+        run_date=RUN_DATE,
+        output_dir=PROJECT_ROOT / "chain_outputs",
+        log_dir=PROJECT_ROOT / "chain_logs",
+        tag=EXPERIMENT_TAG,
+        objective_file=OBJECTIVE_FILE,
+        maximize=MAXIMIZE_OBJECTIVE,
+        region_weights=REGION_WEIGHTS,
+    )
+
+
+def main() -> None:
+    """Runs every seed and starting-plan combination in the experiment settings."""
+    chains = [
+        settings_for_run(seed, starting_plan)
+        for starting_plan in STARTING_PLANS
+        for seed in RNG_SEEDS
+    ]
+    run_chains(chains, max_workers=MAX_WORKERS)
+
+
+if __name__ == "__main__":
+    main()
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    "pipeline_scripts/run_data_collection_scripts.py") cat << 'TEMPLATE_PAYLOAD_EOF'
 import subprocess
 import sys
-from collections.abc import Sequence
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-from dataclasses import dataclass
-from datetime import date, datetime
-from itertools import cycle
 from pathlib import Path
-from re import fullmatch
-from threading import Event, Lock
-from typing import Literal, cast
 
-import click
+PIPELINE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PIPELINE_DIR.parent
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-ACTIVE_PROCESSES: set[subprocess.Popen[bytes]] = set()
-ACTIVE_PROCESSES_LOCK = Lock()
-STOP_REQUESTED = Event()
+# Data collection settings: add or remove script paths to control this stage of the pipeline.
+DATA_COLLECTION_SCRIPTS = (PIPELINE_DIR / "metrics" / "collect_data_vanilla_pa.py",)
 
 
-RECOM_ENGINES = ("gerrychain", "rustrecom-chain", "rustrecom-tilted")
-RECOM_VARIANTS = (
-    "cut-edges-mst",
-    "cut-edges-ust",
-    "district-pairs-mst",
-    "district-pairs-ust",
-)
-
-ReComEngine = Literal["gerrychain", "rustrecom-chain", "rustrecom-tilted"]
-ReComVariant = Literal[
-    "cut-edges-mst",
-    "cut-edges-ust",
-    "district-pairs-mst",
-    "district-pairs-ust",
-]
-
-
-@dataclass(frozen=True, slots=True)
-class ChainSettings:
-    """Describes the inputs and destinations for one independent ReCom chain.
-
-    Attributes:
-        engine (ReComEngine): Program used to generate the chain. ``gerrychain`` runs the
-            Python example, ``rustrecom-chain`` samples an ordinary RustReCom chain, and
-            ``rustrecom-tilted`` applies a RustReCom optimization objective.
-        graph_path (Path): Dual graph supplied to the selected engine.
-        output_prefix (str): Analysis name included in output filenames, such as
-            ``VANILLA_PA`` or ``GINGLES_PARTIAL_PA``.
-        starting_plan (str): Node attribute containing each unit's starting district.
-        pop_col (str): Node attribute containing the population used for balance constraints.
-        rng_seed (int): Seed that makes this chain's random proposal stream reproducible.
-        total_steps (int): Number of chain positions requested from the selected engine.
-        population_tolerance (float): Maximum fractional population deviation allowed by ReCom.
-            For example, ``0.01`` permits one percent deviation from ideal population.
-        recom_variant (ReComVariant): Rule used to select adjacent districts and sample a
-            spanning tree for each ReCom proposal.
-        run_date (str): Experiment date written into the output filenames in ``YYYY-MM-DD`` form.
-        output_dir (Path): Directory for BENDL recordings and tilted score files.
-        log_dir (Path): Directory for one child-process log per random seed.
-        tag (str): Short experiment name included in every output filename.
-        objective_file (Path | None): RustReCom objective JSON used for a tilted chain.
-        maximize (bool): Whether a tilted chain searches for larger or smaller objective values.
-        region_weights (dict[str, float] | None): Surcharges for cutting named region columns.
-            Region-aware proposals require an MST ReCom variant.
-    """
-
-    engine: ReComEngine
-    graph_path: Path
-    output_prefix: str
-    starting_plan: str
-    pop_col: str
-    rng_seed: int
-    total_steps: int
-    population_tolerance: float
-    recom_variant: ReComVariant
-    run_date: str
-    output_dir: Path
-    log_dir: Path
-    tag: str = "baseline"
-    objective_file: Path | None = None
-    maximize: bool = True
-    region_weights: dict[str, float] | None = None
-
-    def __post_init__(self) -> None:
-        if self.engine not in RECOM_ENGINES:
-            raise ValueError(f"Unknown engine: {self.engine}.")
-        if self.recom_variant not in RECOM_VARIANTS:
-            raise ValueError(f"Unknown ReCom variant: {self.recom_variant}.")
-        if self.engine == "rustrecom-tilted" and self.objective_file is None:
-            raise ValueError("--objective-file is required for rustrecom-tilted.")
-        if self.engine != "rustrecom-tilted" and self.objective_file is not None:
-            raise ValueError("--objective-file is only valid for rustrecom-tilted.")
-        if not self.graph_path.exists():
-            raise ValueError(f"Graph path does not exist: {self.graph_path}")
-        if self.objective_file is not None and not self.objective_file.exists():
-            raise ValueError(f"Objective file does not exist: {self.objective_file}")
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-
-        if self.region_weights is not None and self.recom_variant not in (
-            "cut-edges-mst",
-            "district-pairs-mst",
-        ):
-            raise ValueError(
-                "Region weights are only applicable for 'mst' ReCom variants. "
-                f"Provided variant: {self.recom_variant}"
-            )
-
-
-def filename_token(
-    _context: click.Context,
-    parameter: click.Parameter,
-    value: str,
-) -> str:
-    """Validates a user-supplied value before placing it in an output filename.
-
-    Args:
-        _context (click.Context): Click command context. It is unused by this validator.
-        parameter (click.Parameter): Option being validated, used in any error message.
-        value (str): Proposed filename component.
-
-    Returns:
-        str: The unchanged value when it contains only path-safe characters.
-
-    Raises:
-        click.BadParameter: If the value could create a path or ambiguous filename component.
-    """
-    if not fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value):
-        raise click.BadParameter(
-            "use only letters, numbers, periods, underscores, and hyphens",
-            param=parameter,
+def main() -> None:
+    """Runs each configured data collection script in order."""
+    for script_path in DATA_COLLECTION_SCRIPTS:
+        print(f"Running {script_path.relative_to(PROJECT_ROOT)}...", flush=True)
+        subprocess.run(
+            [sys.executable, str(script_path)],
+            cwd=PROJECT_ROOT,
+            check=True,
         )
-    return value
 
 
-def parse_region_weights(
-    _context: click.Context,  # Click supplies context to every option callback.
-    parameter: click.Parameter,
-    value: str | None,
-) -> dict[str, float] | None:
-    """Parses region-aware ReCom surcharges from a command-line JSON object.
+if __name__ == "__main__":
+    main()
+TEMPLATE_PAYLOAD_EOF
+        ;;
+    "pipeline_scripts/run_figure_generation_scripts.py") cat << 'TEMPLATE_PAYLOAD_EOF'
+import subprocess
+import sys
+from pathlib import Path
 
-    A weight increases the cost of a spanning-tree edge that crosses the named region column.
-    For example, ``{"COUNTY": 1.0}`` discourages county splits without prohibiting them.
+PIPELINE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PIPELINE_DIR.parent
 
-    Args:
-        _context (click.Context): Click command context. It is unused by this parser.
-        parameter (click.Parameter): Option being parsed, used in any error message.
-        value (str | None): JSON object supplied to ``--region-weights``, or ``None`` when the
-            option was omitted.
-
-    Returns:
-        dict[str, float] | None: Region columns and their finite numeric surcharges, or ``None``
-            when no surcharges were supplied.
-
-    Raises:
-        click.BadParameter: If the value is not a JSON object with non-empty string keys and
-            finite numeric values.
-    """
-    if value is None:
-        return None
-    try:
-        parsed = json.loads(value)
-    except json.JSONDecodeError as error:
-        raise click.BadParameter("must be a JSON object", param=parameter) from error
-    if not isinstance(parsed, dict):
-        raise click.BadParameter("must be a JSON object", param=parameter)
-
-    weights: dict[str, float] = {}
-    for column, weight in parsed.items():
-        if not isinstance(column, str) or not column:
-            raise click.BadParameter("column names must be non-empty strings", param=parameter)
-        if (
-            isinstance(weight, bool)
-            or not isinstance(weight, (int, float))
-            or not math.isfinite(weight)
-        ):
-            raise click.BadParameter("weights must be finite numbers", param=parameter)
-        weights[column] = float(weight)
-    return weights or None
+# Figure settings: add, remove, or reorder script paths to control this pipeline stage.
+FIGURE_GENERATION_SCRIPTS = (
+    PIPELINE_DIR / "figure_generators" / "base_plan_figures.py",
+    PIPELINE_DIR / "figure_generators" / "cut_edges_histogram.py",
+    PIPELINE_DIR / "figure_generators" / "disprop_scatter.py",
+    PIPELINE_DIR / "figure_generators" / "reock_boxplot.py",
+)
 
 
-def run_chain(settings: ChainSettings) -> tuple[int, int, Path]:
-    """Runs one chain as a child process and records its console output.
-
-    The function translates shared experiment settings into either the GerryChain example CLI or
-    RustReCom CLI. Each chain writes to its own BENDL and log files, which prevents output from
-    concurrent runs from being interleaved.
-
-    Args:
-        settings (ChainSettings): Complete settings for one independently seeded chain.
-
-    Returns:
-        tuple[int, int, Path]: Random seed, child-process exit code, and log path. An exit code of
-            zero means the chain completed successfully.
-    """
-    engine_prefix = "PY" if settings.engine == "gerrychain" else "RUST"
-    tolerance_label = f"{settings.population_tolerance:g}".replace(".", "p")
-    filename_stem = (
-        f"{engine_prefix}_{settings.output_prefix}"
-        f"__STEPS_{settings.total_steps}"
-        f"__RNGSEED_{settings.rng_seed}"
-        f"__TOL_{tolerance_label}"
-        f"__SEEDPLN__{settings.starting_plan}"
-        f"__TAG_{settings.tag}"
-        f"__DATE_{settings.run_date}"
-    )
-    output_path = settings.output_dir / f"{filename_stem}.bendl"
-    log_path = settings.log_dir / f"{filename_stem}.log"
-    if settings.engine == "gerrychain":
-        command = [
-            sys.executable,
-            str(ROOT_DIR / "pipeline_scripts" / "chain_runners" / "example_cli.py"),
-            "--graph-path",
-            str(settings.graph_path),
-            "--output-path",
-            str(output_path),
-            "--starting-plan",
-            settings.starting_plan,
-            "--pop-col",
-            settings.pop_col,
-            "--rng-seed",
-            str(settings.rng_seed),
-            "--population-tolerance",
-            str(settings.population_tolerance),
-            "--total-steps",
-            str(settings.total_steps),
-            "--recom-variant",
-            settings.recom_variant,
-        ]
-    else:
-        rustrecom_command = "chain" if settings.engine == "rustrecom-chain" else "tilted"
-        command = [
-            "rustrecom",
-            rustrecom_command,
-            "--graph-json",
-            str(settings.graph_path),
-            "--output-file",
-            str(output_path),
-            "--assignment-col",
-            settings.starting_plan,
-            "--pop-col",
-            settings.pop_col,
-            "--rng-seed",
-            str(settings.rng_seed),
-            "--tol",
-            str(settings.population_tolerance),
-            "--n-steps",
-            str(settings.total_steps),
-            "--variant",
-            settings.recom_variant,
-            "--writer",
-            "bendl",
-            "--overwrite-output",
-        ]
-        if settings.engine == "rustrecom-tilted" and settings.objective_file is not None:
-            scores_path = output_path.with_name(f"{output_path.stem}_scores.csv")
-            command.extend(
-                [
-                    "--objective",
-                    str(settings.objective_file),
-                    "--maximize",
-                    str(settings.maximize).lower(),
-                    "--scores-output-file",
-                    str(scores_path),
-                ]
-            )
-
-    if settings.region_weights is not None:
-        command.extend(["--region-weights", json.dumps(settings.region_weights, sort_keys=True)])
-
-    with log_path.open("wb") as log_file:
-        log_file.write(
-            f"Starting {settings.engine} chain with RNG seed {settings.rng_seed}.\n".encode()
+def main() -> None:
+    """Runs each configured figure generation script in order."""
+    for script_path in FIGURE_GENERATION_SCRIPTS:
+        print(f"Running {script_path.relative_to(PROJECT_ROOT)}...", flush=True)
+        subprocess.run(
+            [sys.executable, str(script_path)],
+            cwd=PROJECT_ROOT,
+            check=True,
         )
-        log_file.flush()
-        try:
-            # Registration shares a lock with interruption cleanup, so cleanup cannot miss a
-            # process that has started but is not yet tracked.
-            with ACTIVE_PROCESSES_LOCK:
-                if STOP_REQUESTED.is_set():
-                    log_file.write(b"Cancelled before launch.\n")
-                    return settings.rng_seed, 130, log_path
-                process = subprocess.Popen(command, stdout=log_file, stderr=subprocess.STDOUT)
-                ACTIVE_PROCESSES.add(process)
-        except OSError as error:
-            log_file.write(f"Could not start chain: {error}\n".encode())
-            return settings.rng_seed, 127, log_path
-
-        try:
-            exit_code = process.wait()
-            log_file.write(f"\nChild process exited with code {exit_code}.\n".encode())
-            return settings.rng_seed, exit_code, log_path
-        finally:
-            with ACTIVE_PROCESSES_LOCK:
-                ACTIVE_PROCESSES.discard(process)
-
-
-def stop_active_processes() -> None:
-    """Stops child chains after an interruption, then kills any that do not exit promptly."""
-    with ACTIVE_PROCESSES_LOCK:
-        processes = list(ACTIVE_PROCESSES)
-    for process in processes:
-        process.terminate()
-    for process in processes:
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-
-
-def run_chains(
-    settings_by_seed: Sequence[ChainSettings],
-    max_workers: int = 1,
-) -> None:
-    """Runs independently seeded chains with a limit on simultaneous child processes.
-
-    This is the main Python interface for batch runs. Each ``ChainSettings`` value describes one
-    chain, and ``max_workers`` controls how many of those chains may run at the same time. Child
-    output is kept in separate log files so messages from concurrent chains do not overlap.
-
-    Args:
-        settings_by_seed (Sequence[ChainSettings]): Settings for each independently seeded chain.
-            Random seeds must be unique within the batch.
-        max_workers (int): Maximum number of child processes to run simultaneously. CPU, memory,
-            and I/O requirements scale with this value.
-
-    Raises:
-        ValueError: If the batch is empty, contains duplicate seeds, or has fewer than one worker.
-        RuntimeError: If one or more child chains exit unsuccessfully.
-        KeyboardInterrupt: If the user interrupts the batch. Active child chains are stopped
-            before the exception is raised.
-    """
-    settings = list(settings_by_seed)
-    if not settings:
-        raise ValueError("At least one chain must be configured.")
-    if max_workers < 1:
-        raise ValueError("max_workers must be at least 1.")
-
-    rng_seeds = [chain.rng_seed for chain in settings]
-    if len(set(rng_seeds)) != len(rng_seeds):
-        raise ValueError("Each chain must use a unique RNG seed.")
-
-    STOP_REQUESTED.clear()
-    failures: list[tuple[int, int, Path]] = []
-
-    with ThreadPoolExecutor(max_workers=min(max_workers, len(settings))) as executor:
-        futures = []
-        try:
-            futures = [executor.submit(run_chain, chain) for chain in settings]
-            pending = set(futures)
-            completed = 0
-            spinner = cycle("|/-\\")
-            status_width = 0
-            engine_names = ", ".join(sorted({chain.engine for chain in settings}))
-            click.echo(f"Running {len(futures)} chain(s) with {engine_names}...", err=True)
-            while pending:
-                done, pending = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
-                if not done and sys.stderr.isatty():
-                    status = (
-                        f"{next(spinner)} Running chains ({completed}/{len(futures)} completed)"
-                    )
-                    status_width = max(status_width, len(status))
-                    click.echo(f"\r{status:<{status_width}}", nl=False, err=True)
-                    continue
-
-                if sys.stderr.isatty() and status_width:
-                    click.echo(f"\r{'':<{status_width}}\r", nl=False, err=True)
-                for future in done:
-                    seed, exit_code, log_path = future.result()
-                    completed += 1
-                    if exit_code:
-                        failures.append((seed, exit_code, log_path))
-                        click.echo(f"Seed {seed} failed; see {log_path}.", err=True)
-                    else:
-                        click.echo(f"Seed {seed} completed; log: {log_path}.", err=True)
-        except KeyboardInterrupt:
-            STOP_REQUESTED.set()
-            for future in futures:
-                future.cancel()
-            stop_active_processes()
-            raise
-
-    if failures:
-        failed_seeds = ", ".join(str(seed) for seed, _, _ in failures)
-        raise RuntimeError(f"{len(failures)} chain(s) failed (seeds: {failed_seeds}).")
-
-
-@click.command()
-@click.option(
-    "--engine",
-    type=click.Choice(RECOM_ENGINES),
-    default="gerrychain",
-    show_default=True,
-    help="Program used to generate each chain.",
-)
-@click.option(
-    "--objective-file",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="RustReCom objective JSON; required for rustrecom-tilted.",
-)
-@click.option(
-    "--maximize/--minimize",
-    default=True,
-    show_default=True,
-    help="Direction for a tilted objective.",
-)
-@click.option(
-    "--graph-path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    required=True,
-)
-@click.option(
-    "--output-prefix",
-    required=True,
-    callback=filename_token,
-    help="Analysis name after the automatic PY_ or RUST_ prefix.",
-)
-@click.option(
-    "--starting-plan",
-    required=True,
-    callback=filename_token,
-    help="Starting-plan node attribute.",
-)
-@click.option("--pop-col", required=True, help="Population node attribute.")
-@click.option("--rng-seed", type=int, multiple=True, required=True, help="Repeat for each chain.")
-@click.option("--total-steps", type=click.IntRange(min=1), default=1_000, show_default=True)
-@click.option(
-    "--tag",
-    required=True,
-    callback=filename_token,
-    help="Short name for the experiment, included in every output filename.",
-)
-@click.option(
-    "--run-date",
-    type=click.DateTime(formats=["%Y-%m-%d"]),
-    default=date.today().isoformat(),  # noqa: DTZ011 - use the experimenter's local date.
-    show_default=True,
-    help="Experiment date included in every output filename.",
-)
-@click.option(
-    "--population-tolerance",
-    type=click.FloatRange(min=0, max=1),
-    default=0.01,
-    show_default=True,
-)
-@click.option(
-    "--recom-variant",
-    type=click.Choice(RECOM_VARIANTS),
-    default="district-pairs-mst",
-    show_default=True,
-)
-@click.option(
-    "--max-workers",
-    type=click.IntRange(min=1),
-    default=1,
-    show_default=True,
-    help="Maximum chains to run at once.",
-)
-@click.option(
-    "--region-weights",
-    callback=parse_region_weights,
-    help="Region-column surcharges as JSON, for example '{\"COUNTY\": 1.0}'. MST only.",
-)
-@click.option(
-    "--output-dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=ROOT_DIR / "chain_outputs",
-    show_default=True,
-)
-@click.option(
-    "--log-dir",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=ROOT_DIR / "chain_logs",
-    show_default=True,
-)
-def main(
-    engine: str,
-    graph_path: Path,
-    output_prefix: str,
-    starting_plan: str,
-    pop_col: str,
-    rng_seed: tuple[int, ...],
-    total_steps: int,
-    tag: str,
-    run_date: datetime,
-    population_tolerance: float,
-    recom_variant: str,
-    max_workers: int,
-    region_weights: dict[str, float] | None,
-    objective_file: Path | None,
-    maximize: bool,
-    output_dir: Path,
-    log_dir: Path,
-) -> None:
-    """Runs the Python batch interface from command-line options.
-
-    Args:
-        engine (str): ``gerrychain``, ``rustrecom-chain``, or ``rustrecom-tilted``.
-        graph_path (Path): Dual graph read by every chain.
-        output_prefix (str): Analysis name placed after the automatic ``PY_`` or ``RUST_``
-            filename prefix.
-        starting_plan (str): Node attribute containing the initial district assignment.
-        pop_col (str): Node attribute containing the population used by ReCom.
-        rng_seed (tuple[int, ...]): Unique random seed for each independent chain.
-        total_steps (int): Number of chain positions requested for every seed.
-        tag (str): Experiment name included in each BENDL and log filename.
-        run_date (datetime): Experiment date included in each output filename.
-        population_tolerance (float): Maximum fractional deviation from ideal population.
-        recom_variant (str): District-pair and spanning-tree sampling rule.
-        max_workers (int): Maximum number of independently seeded child processes to run at once.
-        region_weights (dict[str, float] | None): Optional region-column split surcharges.
-        objective_file (Path | None): Objective JSON required for tilted RustReCom.
-        maximize (bool): Whether tilted RustReCom searches for larger objective values.
-        output_dir (Path): Destination for BENDL recordings and tilted score files.
-        log_dir (Path): Destination for one child-process log per seed.
-
-    Raises:
-        click.ClickException: If settings are incompatible or one or more child chains fail.
-        click.Abort: If the user interrupts the batch.
-    """
-    try:
-        settings_by_seed = [
-            ChainSettings(
-                engine=cast(ReComEngine, engine),
-                graph_path=graph_path,
-                output_prefix=output_prefix,
-                starting_plan=starting_plan,
-                pop_col=pop_col,
-                rng_seed=seed,
-                total_steps=total_steps,
-                population_tolerance=population_tolerance,
-                recom_variant=cast(ReComVariant, recom_variant),
-                run_date=run_date.date().isoformat(),
-                output_dir=output_dir,
-                log_dir=log_dir,
-                tag=tag,
-                objective_file=objective_file,
-                maximize=maximize,
-                region_weights=region_weights,
-            )
-            for seed in rng_seed
-        ]
-    except ValueError as error:
-        raise click.ClickException(str(error)) from error
-
-    try:
-        run_chains(settings_by_seed, max_workers=max_workers)
-    except (ValueError, RuntimeError) as error:
-        raise click.ClickException(str(error)) from error
-    except KeyboardInterrupt as error:
-        raise click.Abort() from error
 
 
 if __name__ == "__main__":
@@ -13867,83 +14062,6 @@ dev = [
 
 [tool.ruff]
 line-length = 100
-TEMPLATE_PAYLOAD_EOF
-        ;;
-    "run_chains.py") cat << 'TEMPLATE_PAYLOAD_EOF'
-"""Configure and run an independently seeded batch of ReCom chains."""
-
-from datetime import date
-from pathlib import Path
-
-from pipeline_scripts.run_parallel_chains import (
-    ChainSettings,
-    ReComEngine,
-    ReComVariant,
-    run_chains,
-)
-
-PROJECT_ROOT = Path(__file__).resolve().parent
-OBJECTIVES_DIR = PROJECT_ROOT / "pipeline_scripts" / "chain_runners" / "rustrecom_objectives"
-
-# Experiment settings: edit this block, then run `uv run run_chains.py`.
-ENGINE: ReComEngine = "gerrychain"
-GRAPH_PATH = PROJECT_ROOT / "JSON_dualgraphs" / "pa_dualgraph.json"
-OUTPUT_PREFIX = "VANILLA_PA"
-STARTING_PLAN = "seed_plan"
-POPULATION_COLUMN = "total_pop_20"
-RNG_SEEDS = (42,)
-TOTAL_STEPS = 100
-POPULATION_TOLERANCE = 0.01
-RECOM_VARIANT: ReComVariant = "district-pairs-mst"
-EXPERIMENT_TAG = "quickstart"
-RUN_DATE = date.today().isoformat()  # noqa: DTZ011 - use the experimenter's local date.
-MAX_WORKERS = 1
-
-# Tilted RustReCom requires an objective file. Ordinary GerryChain and RustReCom runs use None.
-OBJECTIVE_FILE: Path | None = None
-MAXIMIZE_OBJECTIVE = True
-
-# Region weights are optional and require an MST variant. Example: {"county_id": 1.0}
-REGION_WEIGHTS: dict[str, float] | None = None
-
-
-def settings_for_seed(rng_seed: int) -> ChainSettings:
-    """Builds the complete settings for one independently seeded chain.
-
-    Args:
-        rng_seed (int): Random seed that identifies and reproduces this chain.
-
-    Returns:
-        ChainSettings: Engine, graph, ReCom, and output settings for the chain.
-    """
-    return ChainSettings(
-        engine=ENGINE,
-        graph_path=GRAPH_PATH,
-        output_prefix=OUTPUT_PREFIX,
-        starting_plan=STARTING_PLAN,
-        pop_col=POPULATION_COLUMN,
-        rng_seed=rng_seed,
-        total_steps=TOTAL_STEPS,
-        population_tolerance=POPULATION_TOLERANCE,
-        recom_variant=RECOM_VARIANT,
-        run_date=RUN_DATE,
-        output_dir=PROJECT_ROOT / "chain_outputs",
-        log_dir=PROJECT_ROOT / "chain_logs",
-        tag=EXPERIMENT_TAG,
-        objective_file=OBJECTIVE_FILE,
-        maximize=MAXIMIZE_OBJECTIVE,
-        region_weights=REGION_WEIGHTS,
-    )
-
-
-def main() -> None:
-    """Runs every configured seed and reports the location of each per-chain log."""
-    chains = [settings_for_seed(seed) for seed in RNG_SEEDS]
-    run_chains(chains, max_workers=MAX_WORKERS)
-
-
-if __name__ == "__main__":
-    main()
 TEMPLATE_PAYLOAD_EOF
         ;;
     esac
@@ -13993,7 +14111,13 @@ function main() {
     if [[ "$use_rustrecom" == "y" || "$use_rustrecom" == "Y" ]]; then
         check_cargo_installed
         echo "Installing RustReCom (rustrecom, version 0.2.0)..."
-        cargo install --git "https://github.com/mggg/rustrecom" --tag "v0.2.0" --locked --force
+        # RustReCom 0.2.0 builds compatibility binaries that share an unused helper.
+        cargo install \
+            --config 'build.rustflags=["-A","dead_code"]' \
+            --git "https://github.com/mggg/rustrecom" \
+            --tag "v0.2.0" \
+            --locked \
+            --force
         echo "RustReCom has been installed."
     fi
 
@@ -14026,6 +14150,7 @@ function main() {
     mv pyproject.toml.tmp pyproject.toml
 
     echo "Installing the project environment with uv ($python_version)..."
+    uv venv --python "$python_version" --prompt "$project_name"
     uv sync --python "$python_version"
 
     echo "Downloading PA geometry..."
@@ -14048,7 +14173,7 @@ function main() {
     fi
     mv "$pa_tmp" "data/pa_gdf.parquet"
 
-    echo "Your project is ready! You may need to restart your shell for uv to work properly."
+    echo "Project '$project_name' is ready! You may need to restart your shell for uv to work properly."
 }
 
 main "$@"

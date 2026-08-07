@@ -7,6 +7,12 @@ from gerrytools.scoring import EnsembleEvalResult, cut_edges
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FIGURES_DIR = ROOT_DIR / "figures"
 
+# Figure settings: edit this block, then run this file with `uv run`.
+STATS_GLOB = "*VANILLA_PA*"
+STARTING_PLAN = "seed_plan"
+BIN_WIDTH = 10
+X_LIMITS = (2750, 3550)
+
 
 def original_cut_edges() -> int:
     """Calculates the cut-edge count for the graph's seed plan.
@@ -16,7 +22,7 @@ def original_cut_edges() -> int:
     """
     graph = Graph.from_json(str(ROOT_DIR / "JSON_dualgraphs" / "pa_dualgraph.json"))
 
-    partition = Partition(graph, assignment="seed_plan")
+    partition = Partition(graph, assignment=STARTING_PLAN)
 
     cut_edge_count = cut_edges(partition)
     if not isinstance(cut_edge_count, (int, float)):
@@ -42,8 +48,8 @@ def create_cut_edge_hist(stats_dir: Path) -> Path:
 
     hist.add_vertical_lines([original_cut_edges()], linecolor="cherryblossompink", linewidth=2)
 
-    hist.set_bin_widths(10)
-    hist.set_xlim(2750, 3550)
+    hist.set_bin_widths(BIN_WIDTH)
+    hist.set_xlim(*X_LIMITS)
 
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     output_path = FIGURES_DIR / stats_dir.name / f"cut_edges_histogram_{stats_dir.name}.png"
@@ -55,7 +61,11 @@ def create_cut_edge_hist(stats_dir: Path) -> Path:
 def main() -> None:
     """Generates a histogram for every vanilla Pennsylvania evaluation run."""
     stats_base_dir = ROOT_DIR / "stats"
-    for stats_dir in stats_base_dir.glob("VANILLA_PA*"):
+    stats_dirs = sorted(stats_base_dir.glob(STATS_GLOB))
+    if not stats_dirs:
+        raise FileNotFoundError(f"No directories in {stats_base_dir} match {STATS_GLOB!r}.")
+
+    for stats_dir in stats_dirs:
         print(f"Processing '{stats_dir.name}' ...")
 
         output_path = create_cut_edge_hist(stats_dir)

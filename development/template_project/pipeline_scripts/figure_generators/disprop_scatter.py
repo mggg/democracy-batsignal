@@ -8,7 +8,9 @@ from gerrytools.scoring import EnsembleEvalResult, disproportionality
 ROOT_DIR = Path(__file__).resolve().parents[2]
 FIGURES_DIR = ROOT_DIR / "figures"
 
-
+# Figure settings: edit this block, then run this file with `uv run`.
+STATS_GLOB = "*VANILLA_PA*"
+STARTING_PLAN = "seed_plan"
 ELECTIONS: tuple[str, ...] = (
     "ag_16",
     "ag_20",
@@ -28,7 +30,7 @@ def original_disprop() -> tuple[float, float]:
     """
     graph = Graph.from_json(str(ROOT_DIR / "JSON_dualgraphs" / "pa_dualgraph.json"))
 
-    partition = Partition(graph, assignment="seed_plan")
+    partition = Partition(graph, assignment=STARTING_PLAN)
 
     disprop_values: list[float] = []
     for election in ELECTIONS:
@@ -95,7 +97,11 @@ def create_disprop_scatter(stats_dir: Path) -> Path:
 def main() -> None:
     """Generates a scatter plot for every vanilla Pennsylvania evaluation run."""
     stats_base_dir = ROOT_DIR / "stats"
-    for stats_dir in stats_base_dir.glob("VANILLA_PA*"):
+    stats_dirs = sorted(stats_base_dir.glob(STATS_GLOB))
+    if not stats_dirs:
+        raise FileNotFoundError(f"No directories in {stats_base_dir} match {STATS_GLOB!r}.")
+
+    for stats_dir in stats_dirs:
         print(f"Processing '{stats_dir.name}' ...")
 
         output_path = create_disprop_scatter(stats_dir)

@@ -28,12 +28,13 @@ Use [QUICKSTART.md](QUICKSTART.md) for the shortest path from a dual graph to a 
 ReCom chains. The same Python entry point runs on macOS, Linux, and Windows:
 
 ```bash
-uv run run_chains.py
+uv run pipeline_scripts/run_chains.py
 ```
 
 The included settings run a 100-step Pennsylvania GerryChain example. To use another graph, edit
-the `Experiment settings` block near the top of `run_chains.py`. That selects the engine, graph,
-node columns, seeds, step count, population tolerance, experiment tag, and concurrency.
+the `Experiment settings` block near the top of `pipeline_scripts/run_chains.py`. That selects the
+engine, graph, node columns, seeds, step count, population tolerance, experiment tag, and
+concurrency.
 
 The Democracy Batsignal installer creates and synchronizes the environment. This command reports
 whether the Python packages are importable:
@@ -51,6 +52,14 @@ rustrecom --version
 RustReCom is not installed in the uv environment. It is a Rust executable installed through
 Cargo. The GerryChain examples still work if you skipped it.
 
+Windows PowerShell sessions that run the included `.ps1` references may require:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
+
+The process scope lasts only for the current PowerShell session.
+
 If you change `pyproject.toml`, update the environment with:
 
 ```bash
@@ -61,19 +70,21 @@ uv sync
 
 Each part of an experiment has one primary customization point:
 
-- `run_chains.py` contains the normal experiment settings: graph, columns, engine, seeds, ReCom
-  variant, objective, and concurrency.
+- `pipeline_scripts/run_chains.py` contains the normal experiment settings: graph, columns, engine,
+  seeds, ReCom variant, objective, and concurrency.
+- `pipeline_scripts/run_data_collection_scripts.py` selects the data collectors to run.
+- `pipeline_scripts/run_figure_generation_scripts.py` selects and orders the figure scripts.
 - `notebooks/gerrychain_cut_edges_walkthrough.ipynb` is an interactive GerryChain example from
   graph loading through a 10,000-step cut-edge histogram.
-- `pipeline_scripts/chain_runners/example_cli.py` contains the GerryChain proposal, partition,
+- `pipeline_scripts/chain_runners/gerrychain_cli.py` contains the GerryChain proposal, partition,
   updaters, and BENDL recording. Modify it for new constraints or acceptance rules.
 - `pipeline_scripts/chain_runners/rustrecom_objectives/` contains RustReCom optimization
   objectives. Copy the closest JSON example and change its columns or score settings.
 - `pipeline_scripts/metrics/` contains ensemble scoring. Add statistics here when the output will
   be reused by multiple figures.
 - `pipeline_scripts/figure_generators/` contains maps and plots.
-- `pipeline_scripts/run_parallel_chains.py` owns process scheduling, log capture, and standardized
-  filenames.
+- `pipeline_scripts/chain_runners/batch_runner.py` owns process scheduling, log capture, and
+  standardized filenames.
 - `pyproject.toml` owns Python dependencies. Run `uv sync` after editing it.
 
 ## Project layout
@@ -81,7 +92,6 @@ Each part of an experiment has one primary customization point:
 ```text
 .
 ├── QUICKSTART.md              # ~10-minute guide for adapting the project
-├── run_chains.py              # edit one settings block, then run this file
 ├── JSON_dualgraphs/
 │   ├── gerrymandria.json       # small graph for the Python examples
 │   └── pa_dualgraph.json       # Pennsylvania graph used by RustReCom and scoring examples
@@ -91,8 +101,10 @@ Each part of an experiment has one primary customization point:
 ├── notebooks/
 │   └── gerrychain_cut_edges_walkthrough.ipynb
 ├── pipeline_scripts/
-│   ├── run_parallel_chains.py  # bounded cross-platform chain runner
-│   ├── chain_runners/          # GerryChain and direct RustReCom reference examples
+│   ├── run_chains.py            # edit one settings block, then run this file
+│   ├── run_data_collection_scripts.py
+│   ├── run_figure_generation_scripts.py
+│   ├── chain_runners/           # one-chain CLI and the bounded batch runner
 │   ├── metrics/                # GerryTools evaluation
 │   └── figure_generators/      # maps and ensemble plots
 ├── chain_outputs/              # BENDL recordings
@@ -107,7 +119,7 @@ workflow is identical on every platform.
 
 ## Choose a chain workflow
 
-The project provides three chain-generation modes through `run_chains.py`:
+The project provides three chain-generation modes through `pipeline_scripts/run_chains.py`:
 
 1. `ENGINE = "gerrychain"` records the Python GerryChain example. Use this route when you want to
    modify the proposal, constraints, acceptance rule, or updaters.
@@ -125,9 +137,10 @@ RustReCom also provides two objective-guided search commands:
 An objective-guided run is not a neutral ensemble sample. It is a search for plans that score well
 under the selected objective.
 
-The shell and PowerShell files in `pipeline_scripts/chain_runners/` intentionally expose the raw
-RustReCom CLI. They are direct command references; `run_chains.py` adds Python-based seed lists,
-concurrency, logs, and failure handling around the same commands.
+The Bash project contains `.sh` files in `pipeline_scripts/chain_runners/`; the PowerShell project
+contains the equivalent `.ps1` files. They intentionally expose the raw RustReCom CLI.
+`pipeline_scripts/run_chains.py` adds Python-based plan and seed lists, concurrency, logs, and
+failure handling around the same commands.
 
 ## Preparing a dual graph
 
@@ -164,9 +177,10 @@ In PowerShell, put the Python portion in a temporary `.py` file and run it with 
 
 ## RustReCom ordinary chains
 
-The complete Pennsylvania examples are
-`pipeline_scripts/chain_runners/pa_example_script_vanilla.sh` and its PowerShell counterpart.
-Their central command is:
+The complete Pennsylvania example is
+`pipeline_scripts/chain_runners/pa_example_script_vanilla.sh` in a Bash project or
+`pipeline_scripts/chain_runners/pa_example_script_vanilla.ps1` in a PowerShell project. Its central
+command is:
 
 ```bash
 rustrecom chain \
@@ -189,8 +203,8 @@ the next line; the PowerShell reference uses backticks for the same purpose. Opt
 change the run.
 
 One call produces one independently seeded chain and one output file. The reference scripts loop
-over two seeds to demonstrate reproducible independent runs. `run_chains.py` manages seed lists,
-concurrency, logs, and failures in Python.
+over two seeds to demonstrate reproducible independent runs. `pipeline_scripts/run_chains.py`
+manages plan-and-seed combinations, concurrency, logs, and failures in Python.
 
 ### Core chain options
 
@@ -296,9 +310,9 @@ rustrecom tilted \
     --show-progress
 ```
 
-`pipeline_scripts/chain_runners/pa_example_script_opt.sh` or its PowerShell counterpart contains a
-complete two-seed example. `--objective` also accepts inline JSON, but a file is easier to inspect,
-reuse, and preserve with the results.
+`pipeline_scripts/chain_runners/pa_example_script_opt.sh` in a Bash project or the corresponding
+`.ps1` file in a PowerShell project contains a complete two-seed example. `--objective` also accepts
+inline JSON, but a file is easier to inspect, reuse, and preserve with the results.
 
 ### Tilted acceptance
 
@@ -463,7 +477,7 @@ possible to 50%.
 
 ## GerryChain recording workflow
 
-`pipeline_scripts/chain_runners/example_cli.py` shows the current GerryChain and GerryTools
+`pipeline_scripts/chain_runners/gerrychain_cli.py` shows the current GerryChain and GerryTools
 recording pattern:
 
 1. load a `gerrychain.Graph`;
@@ -472,25 +486,33 @@ recording pattern:
 4. select one of GerryChain 1.0's four standard `ReCom` proposal variants; and
 5. iterate the chain to write a BENDL recording.
 
-Select this implementation through the editable Python settings in `run_chains.py`:
+The batch runner starts every chain as a child process. This CLI gives GerryChain a stable
+one-chain command, so the batch runner can schedule Python and RustReCom runs without
+changing its process, logging, or failure-handling syntax. Normal experiment settings remain in
+`pipeline_scripts/run_chains.py`.
+
+Select this implementation through the editable Python settings in
+`pipeline_scripts/run_chains.py`:
 
 ```python
 ENGINE = "gerrychain"
 GRAPH_PATH = PROJECT_ROOT / "JSON_dualgraphs" / "pa_dualgraph.json"
-STARTING_PLAN = "seed_plan"
+STARTING_PLANS = ("seed_plan",)
 POPULATION_COLUMN = "total_pop_20"
 RNG_SEEDS = (42,)
 TOTAL_STEPS = 100
 ```
 
-`STARTING_PLAN` is a node attribute name, not a path to an assignment file. The GerryChain
-implementation converts its labels to BENDL-compatible integer district IDs. Existing
-integer-like labels retain their integer values; other hashable labels receive stable IDs based on
-graph iteration order.
+Each item in `STARTING_PLANS` is a node attribute name, not a path to an assignment file. Every
+starting plan is combined with every value in `RNG_SEEDS`. The GerryChain implementation converts
+assignment labels to BENDL-compatible integer district IDs. Integer-like labels retain their values
+when conversion is one-to-one and the IDs are between 0 and 65,535; other hashable labels receive
+stable IDs based on graph iteration order. Missing and non-finite labels are rejected, normalization
+never merges distinct labels, and a BENDL recording can contain at most 65,536 distinct districts.
 
 The `RecordedChain` metadata stores the starting-plan column, population column, tolerance, and
 seed. The `--recom-variant` choices match the four common variants in the table above. Add your own
-constraints, updaters, and acceptance rule in `chain_runners/example_cli.py` when adapting the
+constraints, updaters, and acceptance rule in `chain_runners/gerrychain_cli.py` when adapting the
 workflow.
 
 The two MST variants also accept region-column surcharges. For example,
@@ -500,10 +522,11 @@ weights.
 
 ### Python batch configuration
 
-`run_chains.py` is the user-facing experiment file. Add a unique integer to `RNG_SEEDS` for every
-independent chain and set `MAX_WORKERS` to the maximum number that may run simultaneously:
+`pipeline_scripts/run_chains.py` is the user-facing experiment file. Each starting-plan column is
+combined with each random seed. `MAX_WORKERS` sets the maximum number that may run simultaneously:
 
 ```python
+STARTING_PLANS = ("enacted_plan", "alternate_plan")
 RNG_SEEDS = (42, 43, 44, 45)
 MAX_WORKERS = 2
 ```
@@ -524,12 +547,12 @@ OBJECTIVE_FILE = OBJECTIVES_DIR / "gingles_partial.json"
 MAXIMIZE_OBJECTIVE = True
 ```
 
-Each tilted seed writes both a BENDL recording and a `_scores.csv` file. RustReCom remains a
+Each tilted run writes both a BENDL recording and a `_scores.csv` file. RustReCom remains a
 standalone executable; the Python scheduler starts `rustrecom chain` or `rustrecom tilted` as a
-child process for each seed.
+child process for each starting-plan and seed combination.
 
 The scheduler shows one aggregate spinner while chains run. Output from GerryChain and RustReCom,
-including their progress indicators, goes to the per-seed files in `chain_logs/` instead of being
+including their progress indicators, goes to the per-run files in `chain_logs/` instead of being
 interleaved in the calling terminal.
 
 The scheduler accepts the same `REGION_WEIGHTS` dictionary for GerryChain and both RustReCom modes.
@@ -540,30 +563,32 @@ experiment specification can use either engine. Region weights require an MST va
 
 `EXPERIMENT_TAG` is the short name of the experiment. Use the same tag for runs that belong to one
 analysis, such as `baseline`, `beta-0p5`, or `county-split-test`. Tags may contain letters, numbers,
-periods, underscores, and hyphens. `run_chains.py` uses the experimenter's current local date.
+periods, underscores, and hyphens. `pipeline_scripts/run_chains.py` uses the experimenter's current
+local date. Values written into filenames cannot contain the reserved `__` field delimiter.
 
-The scheduler adds `PY_` for GerryChain or `RUST_` for either RustReCom mode, then writes:
+The scheduler adds `PY_` for GerryChain, `RUST_CHAIN_` for ordinary RustReCom, or `RUST_TILTED_`
+for tilted RustReCom, then writes:
 
 ```text
 <ENGINE>_<OUTPUT_PREFIX>__STEPS_<steps>__RNGSEED_<seed>__TOL_<tol>__SEEDPLN__<plan_name>__TAG_<tag>__DATE_<date>.bendl
 ```
 
-`<plan_name>` is the node attribute named by `STARTING_PLAN`. The log has the identical stem with
-`.log` and records the engine, seed, child output, and exit code. Tilted RustReCom adds
+`<plan_name>` is one of the node attributes in `STARTING_PLANS`. The log has the identical stem
+with `.log` and records the engine, seed, child output, and exit code. Tilted RustReCom adds
 `_scores.csv` to the stem. For example:
 
 ```text
 PY_VANILLA_PA__STEPS_1000__RNGSEED_42__TOL_0p01__SEEDPLN__seed_plan__TAG_baseline__DATE_2026-08-06.bendl
 ```
 
-`OUTPUT_PREFIX` supplies `VANILLA_PA`; do not include the automatic `PY_` or `RUST_` prefix.
+`OUTPUT_PREFIX` supplies `VANILLA_PA`; do not include an automatic engine prefix.
 
-The runner exits nonzero when any seed fails and reports the corresponding log path.
+The runner exits nonzero when any run fails and reports the corresponding log path.
 
 ### Resource budget
 
-`MAX_WORKERS` controls how many independently seeded child processes run at once. CPU, memory, and
-I/O requirements scale with the number of concurrent processes.
+`MAX_WORKERS` controls how many child processes run at once. CPU, memory, and I/O requirements
+scale with the number of concurrent processes.
 
 ## Scoring a Pennsylvania ensemble
 
@@ -577,21 +602,32 @@ I/O requirements scale with the number of concurrent processes.
 - aggregate Democratic seats across several elections; and
 - election-specific disproportionality.
 
-Run it from the project root with:
+Run the configured data collection stage from the project root with:
 
 ```bash
-uv run pipeline_scripts/metrics/collect_data_vanilla_pa.py --max-workers 1
+uv run pipeline_scripts/run_data_collection_scripts.py
 ```
 
-The default `--input-glob 'VANILLA_PA*.bendl'` matches the ordinary RustReCom example.
-`--max-workers` evaluates independent BENDL files in separate processes. Results are stored under
+`DATA_COLLECTION_SCRIPTS` at the top of that file lists the collectors to run. The Pennsylvania
+collector is included by default, and its own settings select inputs and evaluation batch size:
+
+```python
+INPUT_GLOB = "*VANILLA_PA*.bendl"
+MAX_WORKERS = 1
+BATCH_SIZE = 256
+```
+
+The default glob matches direct `VANILLA_PA...` outputs and all Python-runner outputs whose analysis
+prefix is `VANILLA_PA`, including the `PY_`, `RUST_CHAIN_`, and `RUST_TILTED_` engines.
+`MAX_WORKERS` evaluates independent BENDL files in separate processes, while `BATCH_SIZE` controls
+how many plans are scored together while streaming one recording. Results are stored under
 `stats/<recording-name>/` and can be opened with `gerrytools.scoring.EnsembleEvalResult`.
 
 Generation and scoring are separate stages. A high-throughput workflow consists of:
 
-1. generate several chains with unique seeds and one output file per seed;
+1. generate chains for the configured starting plans and seeds;
 2. collect the completed recordings and their logs;
-3. score the completed files (this can be done in parallel with `--max-workers`);
+3. score the completed files, using `MAX_WORKERS` for process-level parallelism;
 4. open the reusable `EnsembleEvalResult` directories in the plotting scripts.
 
 Evaluation is valid when the graph, geometry, assignment order, and column names describe the same
@@ -605,22 +641,23 @@ geometry in `data/pa_gdf.parquet`.
 
 The figure scripts save PNG files and do not require an interactive Matplotlib window.
 
-Generate the starting-plan, Philadelphia, partisan choropleth, and alternate-plan maps:
+Run the configured figure generation stage:
 
 ```bash
-uv run pipeline_scripts/figure_generators/base_plan_figures.py
+uv run pipeline_scripts/run_figure_generation_scripts.py
 ```
 
-After running the metrics collector, generate the ensemble figures:
+`FIGURE_GENERATION_SCRIPTS` at the top of that file lists the scripts and their execution order. It
+runs the starting-plan maps and the three ensemble figures by default. Run data collection first so
+the ensemble figures have evaluation directories to read.
 
-```bash
-uv run pipeline_scripts/figure_generators/cut_edges_histogram.py
-uv run pipeline_scripts/figure_generators/disprop_scatter.py
-uv run pipeline_scripts/figure_generators/reock_boxplot.py
-```
+Each ensemble script exposes `STATS_GLOB`, `STARTING_PLAN`, and plot-specific settings at the top of
+the file. The default `*VANILLA_PA*` glob matches evaluation directories produced from direct or
+Python-scheduled runs. Images appear under `figures/<recording-name>/`; base-plan maps appear under
+`figures/plan_maps/`.
 
-These three scripts process directories matching `stats/VANILLA_PA*`. Their images appear under
-`figures/<recording-name>/`. The base-plan maps appear under `figures/plan_maps/`.
+`STARTING_PLAN` is one common reference for every directory selected by `STATS_GLOB`. To compare
+each starting plan separately, narrow `STATS_GLOB`, change `STARTING_PLAN`, and rerun the script.
 
 ## Adapting the project to another state
 
@@ -656,8 +693,8 @@ the overwrite flag so rerunning the same seed replaces its earlier example.
 
 ### The metrics or ensemble figure command prints nothing
 
-Check the input naming convention. The evaluator looks for `chain_outputs/VANILLA_PA*.bendl`, and
-the ensemble figures look for `stats/VANILLA_PA*` directories.
+Check `INPUT_GLOB` at the top of the evaluator and `STATS_GLOB` at the top of each ensemble figure
+script. Their defaults match names containing `VANILLA_PA`.
 
 ### Plotting reports a non-GUI backend
 
@@ -667,10 +704,10 @@ That is expected when no display is attached. Look for the saved path printed by
 ### A long run appears stuck
 
 First reproduce the command with a much smaller `--n-steps`. Use `--show-progress`, inspect the
-per-seed log for batch jobs, and check CPU use and available storage. Tight population tolerances
+per-run log for batch jobs, and check CPU use and available storage. Tight population tolerances
 and the chosen graph or proposal variant can materially affect proposal time.
 
-### A parallel batch reports failed seeds
+### A parallel batch reports failed runs
 
 Open the reported file under `chain_logs/`. The runner preserves each child's complete output and
 returns a failing status instead of silently continuing.
